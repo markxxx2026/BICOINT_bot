@@ -14,10 +14,11 @@ const token = process.env.TELEGRAM_BOT_TOKEN;
 const PRICE = Number(process.env.PRICE_FULL_PHOTO || 10);
 
 // Na nuvem (Render define PORT) ou com webhook configurado, nunca usa polling.
+// Se estiver na nuvem sem TELEGRAM_WEBHOOK_URL, cai em polling (fallback) para o bot nunca ficar sem processar.
 const IS_CLOUD = !!process.env.PORT;
 const WEBHOOK_URL = process.env.TELEGRAM_WEBHOOK_URL || '';
 
-const bot = new TelegramBot(token, (IS_CLOUD || WEBHOOK_URL) ? { polling: false } : { polling: true });
+const bot = new TelegramBot(token, { polling: !(IS_CLOUD && WEBHOOK_URL) });
 
 let BOT_USERNAME = '';
 bot.getMe()
