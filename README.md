@@ -1,6 +1,6 @@
 # Bot Bico
 
-Bot do Telegram de busca/comparação facial com pagamento PIX (Asaas), carteira de créditos, sistema de indicação, mescla de rostos e um Mini App (web) de loja.
+Bot do Telegram de busca/comparação facial com pagamento PIX (Asaas), carteira de créditos, sistema de indicação e mescla de rostos.
 
 ## Estrutura
 
@@ -13,9 +13,7 @@ Bot do Telegram de busca/comparação facial com pagamento PIX (Asaas), carteira
 ├── stubs/                # Stub do @tensorflow/tfjs-node (usa backend WASM)
 └── projeto/
     ├── bot/index.js      # Lógica do bot (busca, carteira, indicação, mescla)
-    ├── painel/server.js  # Express: painel admin + Mini App + API + webhook Asaas
-    ├── painel/miniapp-api.js # API do Mini App (auth Telegram, compra, recarga, busca)
-    ├── miniapp/          # Frontend do Mini App (HTML/JS)
+    ├── painel/server.js  # Express: painel admin + API + webhook Asaas
     ├── deploy.js         # Entrada única p/ nuvem (webhook + painel + bot)
     ├── start-all.js      # Supervisor local (roda bot + painel)
     ├── asaas.js, pix.js  # Integração PIX
@@ -36,7 +34,6 @@ node projeto/start-all.js
 
 - Bot em modo **polling** (sem `TELEGRAM_WEBHOOK_URL`).
 - Painel em `http://localhost:3000`.
-- Para expor o Mini App publicamente, use um túnel (ex.: cloudflared) e aponte `WEBAPP_URL`.
 
 ## Publicando no GitHub
 
@@ -53,11 +50,10 @@ Render roda o serviço direto do seu repositório GitHub. Free tier: 1 web servi
 2. Render detecta o `render.yaml`. Ou configure manualmente:
    - Build: `npm install`
    - Start: `node projeto/deploy.js`
-   - Health: `/miniapp/`
+   - Health: `/login`
 3. Defina as variáveis de ambiente (ver tabela abaixo).
 4. `TELEGRAM_WEBHOOK_URL` deve ser `https://SEU-APP.onrender.com/webhook/telegram` — o deploy.js registra o webhook sozinho no boot.
-5. `WEBAPP_URL` deve ser `https://SEU-APP.onrender.com/miniapp/`.
-6. Após o 1º deploy, re-cadastre as fotos/rostos pelo painel (`/login`) — os dados antigos ficaram no seu PC.
+5. Após o 1º deploy, re-cadastre as fotos/rostos pelo painel (`/login`) — os dados antigos ficaram no seu PC.
 
 ### Variáveis de ambiente
 
@@ -73,7 +69,6 @@ Render roda o serviço direto do seu repositório GitHub. Free tier: 1 web servi
 | `PRICE_FULL_PHOTO` | não | Preço da foto completa (default 10) |
 | `REFERRAL_REWARD` | não | Recompensa por indicação (default 10) |
 | `WEBHOOK_TOKEN` | sim | Token do webhook de confirmação de pagamento |
-| `WEBAPP_URL` | sim | URL pública do Mini App (botão Abrir Loja) |
 | `ADMIN_USER` / `ADMIN_PASS` | não | Acesso ao painel admin |
 
 ## Limitações do plano grátis

@@ -1,6 +1,6 @@
 /* ============================================================
    Entrada única de deploy (nuvem) — um processo só:
-   painel + Mini App + bot Telegram (via webhook).
+   painel + bot Telegram (via webhook).
    Uso local continua pelo start-all.js (polling).
    ============================================================ */
 
@@ -10,9 +10,8 @@ require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 const app = require('./painel/server');
 const { bot } = require('./bot/index');
 
-// Webhook: usa TELEGRAM_WEBHOOK_URL ou deriva da WEBAPP_URL (https://host/webhook/telegram).
-const appUrl = (process.env.WEBAPP_URL || '').replace(/\/+$/, '').replace(/\/miniapp$/i, '');
-const WEBHOOK_URL = process.env.TELEGRAM_WEBHOOK_URL || (appUrl ? appUrl + '/webhook/telegram' : '');
+// Webhook: usa TELEGRAM_WEBHOOK_URL (ex.: https://seu-app.onrender.com/webhook/telegram).
+const WEBHOOK_URL = process.env.TELEGRAM_WEBHOOK_URL || '';
 const PORT = Number(process.env.PORT || process.env.PANEL_PORT || 3000);
 
 // Webhook do Telegram (corpo JSON já vem parseado pelo express.json() do painel).

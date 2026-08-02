@@ -7,7 +7,6 @@ const multer = require('multer');
 const db = require('../database/db');
 const faceService = require('../face-service');
 const blur = require('../blur');
-const miniappApi = require('./miniapp-api');
 const referrals = require('../referrals');
 
 const app = express();
@@ -35,8 +34,6 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use('/faces', express.static(FACES_DIR));
 app.use('/blurred', express.static(path.join(__dirname, 'blurred')));
-app.use('/miniapp/api', miniappApi);
-app.use('/miniapp', express.static(path.join(__dirname, '..', 'miniapp')));
 
 function hashPassword(password) {
   const salt = crypto.randomBytes(16).toString('hex');

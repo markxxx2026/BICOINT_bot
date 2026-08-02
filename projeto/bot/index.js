@@ -66,15 +66,11 @@ const FILTER_KEYBOARD = {
   }
 };
 
-const WEBAPP_URL = process.env.WEBAPP_URL || '';
-const WEBAPP_OK = /^https:\/\//.test(WEBAPP_URL) && !/SEU-DOMINIO/.test(WEBAPP_URL);
-
 const SUPPORT_URL = 'https://t.me/alta_sc';
 
 const MENU_KEYBOARD = {
   reply_markup: {
     keyboard: [
-      ...(WEBAPP_OK ? [[{ text: '🛒 ABRIR LOJA', web_app: { url: WEBAPP_URL } }]] : []),
       ['🔎 PROCURAR BICO'],
       ['💰 ABASTECER CRÉDITOS'],
       ['📊 TABELA DE PREÇOS'],
@@ -431,19 +427,6 @@ bot.onText(/\/suporte/, (msg) => {
   bot.sendMessage(chatId, '📞 Precisa de ajuda? Fale direto com o suporte:', {
     reply_markup: {
       inline_keyboard: [[{ text: '💬 CHAMAR SUPORTE', url: SUPPORT_URL }]]
-    }
-  });
-});
-
-bot.onText(/\/loja/, (msg) => {
-  const chatId = msg.chat.id;
-  if (!WEBAPP_OK) {
-    return bot.sendMessage(chatId, '🛒 A loja ainda não foi configurada (faltam definir a URL pública).');
-  }
-  bot.sendMessage(chatId, '🛒 Abra a loja pelo botão abaixo:', {
-    reply_markup: {
-      keyboard: [[{ text: '🛒 ABRIR LOJA', web_app: { url: WEBAPP_URL } }]],
-      resize_keyboard: true
     }
   });
 });
