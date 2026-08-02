@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cadastrar Face | Painel</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">Painel</div>
+  <nav>
+    <a href="/dashboard">Dashboard</a>
+    <a href="/cadastrar">Cadastrar Admin</a>
+    <a href="/cadastrar-face">Cadastrar Face</a>
+    <a href="/pagamentos">Pagamentos</a>
+    <a href="/logout">Sair</a>
+  </nav>
+</header>
+<main>
+  <div class="two-col">
+    <section class="panel">
+      <h2>Cadastrar nova face</h2>
+      <% if (error) { %>
+        <div class="alert error"><%= error %></div>
+      <% } %>
+      <% if (success) { %>
+        <div class="alert success"><%= success %></div>
+      <% } %>
+      <form method="POST" action="/cadastrar-face" enctype="multipart/form-data">
+        <label for="name">Nome</label>
+        <input type="text" id="name" name="name" required autofocus>
+        <label for="description">Descrição</label>
+        <textarea id="description" name="description" rows="6" placeholder="Cole aqui as informações do produto..."></textarea>
+        <label for="gender">Categoria</label>
+        <select id="gender" name="gender">
+          <option value="">— Sem categoria —</option>
+          <option value="homem">👨 Homem</option>
+          <option value="mulher">👩 Mulher</option>
+        </select>
+        <label for="vehicle">Veículo</label>
+        <select id="vehicle" name="vehicle">
+          <option value="">— Nenhum —</option>
+          <option value="carro">🚗 Carro</option>
+          <option value="moto">🏍 Moto/Carro</option>
+        </select>
+        <label for="platform">Plataforma</label>
+        <select id="platform" name="platform">
+          <option value="">— Nenhuma —</option>
+          <option value="uber">UBER</option>
+          <option value="uberx99">Uber X / 99</option>
+          <option value="99">99</option>
+        </select>
+        <label for="foto">Foto do rosto</label>
+        <input type="file" id="foto" name="foto" accept="image/*" required>
+        <button type="submit" class="btn primary">Cadastrar</button>
+      </form>
+    </section>
+
+    <section class="panel">
+      <h2>Faces cadastradas (<%= faces.length %>)</h2>
+      <% if (faces.length === 0) { %>
+        <p class="empty">Nenhuma face cadastrada.</p>
+      <% } else { %>
+        <div class="face-grid">
+          <% faces.forEach(f => { %>
+          <div class="face-card">
+            <img src="/faces/<%= f.photo %>" alt="<%= f.name %>">
+            <div class="face-info">
+              <strong>#<%= f.id %></strong>
+              <span><%= f.name %></span>
+              <% if (f.description) { %>
+                <span class="desc"><%= f.description %></span>
+              <% } %>
+              <span class="tags">
+                <% if (f.gender) { %><span class="tag"><%= f.gender %></span><% } %>
+                <% if (f.vehicle) { %><span class="tag"><%= f.vehicle %></span><% } %>
+                <% if (f.platform) { %><span class="tag"><%= f.platform %></span><% } %>
+              </span>
+            </div>
+            <form method="POST" action="/faces/<%= f.id %>/delete" onsubmit="return confirm('Excluir face <%= f.id %>?')">
+              <button type="submit" class="btn danger small">Excluir</button>
+            </form>
+            <form method="POST" action="/faces/<%= f.id %>/antecedentes" onsubmit="return confirm('Marcar face <%= f.id %> como COM ANTECEDENTES e excluir da loja?')">
+              <button type="submit" class="btn warn small">⚠️ Com antecedentes</button>
+            </form>
+          </div>
+          <% }) %>
+        </div>
+      <% } %>
+    </section>
+  </div>
+</main>
+</body>
+</html>

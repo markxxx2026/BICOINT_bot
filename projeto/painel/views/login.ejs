@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Login | Painel</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body class="login-body">
+<div class="login-card">
+  <h1>Painel de Controle</h1>
+  <p class="muted">Acesse para gerenciar o serviço</p>
+  <% if (error) { %>
+    <div class="alert error"><%= error %></div>
+  <% } %>
+  <form method="POST" action="/login">
+    <label for="username">Usuário</label>
+    <input type="text" id="username" name="username" required autofocus>
+    <label for="password">Senha</label>
+    <input type="password" id="password" name="password" required>
+    <button type="submit" class="btn primary">Entrar</button>
+  </form>
+</div>
+</body>
+</html>

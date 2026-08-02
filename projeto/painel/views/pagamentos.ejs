@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pagamentos | Painel</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">Painel</div>
+  <nav>
+    <a href="/dashboard">Dashboard</a>
+    <a href="/cadastrar">Cadastrar Admin</a>
+    <a href="/cadastrar-face">Cadastrar Face</a>
+    <a href="/pagamentos">Pagamentos</a>
+    <a href="/logout">Sair</a>
+  </nav>
+</header>
+<main>
+  <section class="panel">
+    <h2>Pagamentos (<%= unlocks.filter(u => u.status === 'pendente').length %> pendentes)</h2>
+    <% if (unlocks.length === 0) { %>
+      <p class="empty">Nenhum pagamento ainda.</p>
+    <% } else { %>
+    <table>
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Chat</th>
+          <th>Face</th>
+          <th>Valor</th>
+          <th>Status</th>
+          <th>Data</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        <% unlocks.forEach(u => { %>
+        <tr>
+          <td><%= u.id %></td>
+          <td><%= u.chat_id %></td>
+          <td><%= u.face_id %></td>
+          <td>R$ <%= u.amount.toFixed(2).replace('.', ',') %></td>
+          <td>
+            <% if (u.status === 'pago') { %>
+              <span class="badge paid">✅ Pago</span>
+            <% } else { %>
+              <span class="badge">⏳ Pendente</span>
+            <% } %>
+          </td>
+          <td><%= u.created_at %></td>
+          <td>
+            <% if (u.status !== 'pago') { %>
+              <form method="POST" action="/pagamentos/<%= u.id %>/confirmar" onsubmit="return confirm('Confirmar pagamento <%= u.id %>?')">
+                <button type="submit" class="btn primary small">Confirmar</button>
+              </form>
+            <% } %>
+          </td>
+        </tr>
+        <% }) %>
+      </tbody>
+    </table>
+    <% } %>
+  </section>
+</main>
+</body>
+</html>

@@ -1,0 +1,38 @@
+# Ambiente / segredos
+.env
+.env.*
+!.env.example
+
+# Dependencias
+node_modules/
+
+# Banco de dados (dados reais)
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Logs
+logs/
+projeto/logs/
+
+# Fotos/dados pessoais
+projeto/painel/faces/
+projeto/painel/blurred/
+projeto/painel/uploads/
+projeto/tmp/
+projeto/painel/public/uploads/
+
+# Ferramentas locais (tunel)
+tools/
+
+# Arquivos temporarios/backup
+*.old
+*.tmp
+*.bak
+
+# Sistema
+Thumbs.db
+.DS_Store

@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="refresh" content="5">
+<title>Dashboard | Painel</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">Painel</div>
+  <nav>
+    <a href="/dashboard">Dashboard</a>
+    <a href="/cadastrar">Cadastrar Admin</a>
+    <a href="/cadastrar-face">Cadastrar Face</a>
+    <a href="/pagamentos">Pagamentos</a>
+    <a href="/logout">Sair</a>
+  </nav>
+</header>
+<main>
+  <div class="cards">
+    <div class="card">
+      <h2><%= stats.users %></h2>
+      <p>Usuários (Start)</p>
+    </div>
+    <div class="card">
+      <h2><%= stats.faces %></h2>
+      <p>Produtos Ativos</p>
+    </div>
+    <div class="card">
+      <h2><%= stats.sold %></h2>
+      <p>Vendidos</p>
+    </div>
+    <div class="card">
+      <h2>R$ <%= stats.receita.toFixed(2).replace('.', ',') %></h2>
+      <p>Receita Total</p>
+    </div>
+    <div class="card">
+      <h2><%= stats.pendentes %></h2>
+      <p>Pagamentos Pendentes</p>
+    </div>
+  </div>
+
+  <section class="panel">
+    <h2>Gerar Gift (vale 1 compra)</h2>
+    <% if (newGift) { %>
+      <div class="alert success">
+        🎁 Gift gerado com sucesso! Envie este código para o cliente:<br>
+        <strong style="font-size: 1.3rem; letter-spacing: 1px;"><%= newGift %></strong><br>
+        O cliente resgata no bot com: <code>/resgatar <%= newGift %></code>
+      </div>
+    <% } %>
+    <form method="POST" action="/gifts/gerar">
+      <button type="submit" class="btn primary">🎁 Gerar Gift (vale 1 compra)</button>
+    </form>
+  </section>
+
+  <section class="panel">
+    <h2>Gifts gerados</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Código</th>
+          <th>Valor</th>
+          <th>Status</th>
+          <th>Usado por</th>
+          <th>Criado em</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% gifts.forEach(g => { %>
+        <tr>
+          <td><code><%= g.code %></code></td>
+          <td>R$ <%= g.credits.toFixed(2).replace('.', ',') %></td>
+          <td><span class="badge <%= g.status === 'ativo' ? 'ok' : 'warn' %>"><%= g.status %></span></td>
+          <td><%= g.used_by || '—' %></td>
+          <td><%= g.created_at %></td>
+        </tr>
+        <% }) %>
+        <% if (gifts.length === 0) { %>
+        <tr><td colspan="5" class="empty">Nenhum gift gerado ainda.</td></tr>
+        <% } %>
+      </tbody>
+    </table>
+  </section>
+
+  <section class="panel">
+    <h2>Últimos pagamentos (em tempo real)</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Tipo</th>
+          <th>Detalhe</th>
+          <th>Chat</th>
+          <th>Valor</th>
+          <th>Status</th>
+          <th>Data</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% payments.forEach(p => { %>
+        <tr>
+          <td><%= p.tipo === 'unlock' ? '📸 Foto' : '💰 Recarga' %></td>
+          <td><%= p.descricao %></td>
+          <td><%= p.chat_id %></td>
+          <td>R$ <%= p.amount.toFixed(2).replace('.', ',') %></td>
+          <td><span class="badge <%= p.status === 'pago' ? 'ok' : 'warn' %>"><%= p.status %></span></td>
+          <td><%= p.created_at %></td>
+        </tr>
+        <% }) %>
+        <% if (payments.length === 0) { %>
+        <tr><td colspan="6" class="empty">Nenhum pagamento ainda.</td></tr>
+        <% } %>
+      </tbody>
+    </table>
+  </section>
+</main>
+</body>
+</html>

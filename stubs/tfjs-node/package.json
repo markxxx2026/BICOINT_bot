@@ -1,0 +1,8 @@
+{
+  "name": "@tensorflow/tfjs-node",
+  "version": "4.22.0",
+  "main": "index.js",
+  "private": true,
+  "description": "Stub: redireciona para @tensorflow/tfjs (backend WASM) pois o binario nativo nao roda no CPU (sem AVX).",
+  "license": "Apache-2.0"
+}

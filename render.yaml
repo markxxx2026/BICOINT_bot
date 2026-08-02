@@ -1,0 +1,38 @@
+services:
+  - type: web
+    name: bot-bico
+    runtime: node
+    plan: free
+    rootDir: .
+    buildCommand: npm install
+    startCommand: node projeto/deploy.js
+    healthCheckPath: /miniapp/
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_WEBHOOK_URL
+        sync: false
+      - key: ASAAS_API_KEY
+        sync: false
+      - key: ASAAS_CUSTOMER_CPF
+        sync: false
+      - key: PIX_KEY
+        sync: false
+      - key: PIX_NAME
+        sync: false
+      - key: PIX_CITY
+        sync: false
+      - key: PRICE_FULL_PHOTO
+        value: "10"
+      - key: REFERRAL_REWARD
+        value: "10"
+      - key: WEBHOOK_TOKEN
+        sync: false
+      - key: WEBAPP_URL
+        sync: false
+      - key: ADMIN_USER
+        value: admin
+      - key: ADMIN_PASS
+        sync: false

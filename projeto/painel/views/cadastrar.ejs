@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cadastrar Admin | Painel</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">Painel</div>
+  <nav>
+    <a href="/dashboard">Dashboard</a>
+    <a href="/cadastrar">Cadastrar Admin</a>
+    <a href="/cadastrar-face">Cadastrar Face</a>
+    <a href="/pagamentos">Pagamentos</a>
+    <a href="/logout">Sair</a>
+  </nav>
+</header>
+<main>
+  <section class="panel narrow">
+    <h2>Cadastrar novo admin</h2>
+    <% if (error) { %>
+      <div class="alert error"><%= error %></div>
+    <% } %>
+    <% if (success) { %>
+      <div class="alert success"><%= success %></div>
+    <% } %>
+    <form method="POST" action="/cadastrar">
+      <label for="username">Usuário</label>
+      <input type="text" id="username" name="username" required autofocus>
+      <label for="password">Senha</label>
+      <input type="password" id="password" name="password" required>
+      <label for="confirm">Confirmar senha</label>
+      <input type="password" id="confirm" name="confirm" required>
+      <button type="submit" class="btn primary">Cadastrar</button>
+    </form>
+  </section>
+</main>
+</body>
+</html>
