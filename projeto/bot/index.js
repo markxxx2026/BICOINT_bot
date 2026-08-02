@@ -13,9 +13,11 @@ const { morphFaces } = require('../mescla');
 const token = process.env.TELEGRAM_BOT_TOKEN;
 const PRICE = Number(process.env.PRICE_FULL_PHOTO || 10);
 
+// Na nuvem (Render define PORT) ou com webhook configurado, nunca usa polling.
+const IS_CLOUD = !!process.env.PORT;
 const WEBHOOK_URL = process.env.TELEGRAM_WEBHOOK_URL || '';
 
-const bot = new TelegramBot(token, WEBHOOK_URL ? { polling: false } : { polling: true });
+const bot = new TelegramBot(token, (IS_CLOUD || WEBHOOK_URL) ? { polling: false } : { polling: true });
 
 let BOT_USERNAME = '';
 bot.getMe()

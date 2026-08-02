@@ -10,7 +10,9 @@ require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 const app = require('./painel/server');
 const { bot } = require('./bot/index');
 
-const WEBHOOK_URL = process.env.TELEGRAM_WEBHOOK_URL || '';
+// Webhook: usa TELEGRAM_WEBHOOK_URL ou deriva da WEBAPP_URL (https://host/webhook/telegram).
+const appUrl = (process.env.WEBAPP_URL || '').replace(/\/+$/, '').replace(/\/miniapp$/i, '');
+const WEBHOOK_URL = process.env.TELEGRAM_WEBHOOK_URL || (appUrl ? appUrl + '/webhook/telegram' : '');
 const PORT = Number(process.env.PORT || process.env.PANEL_PORT || 3000);
 
 // Webhook do Telegram (corpo JSON já vem parseado pelo express.json() do painel).
