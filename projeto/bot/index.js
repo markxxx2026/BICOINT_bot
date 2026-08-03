@@ -58,19 +58,100 @@ faceService.warmup()
   .then(() => console.log('Modelos de reconhecimento pré-carregados.'))
   .catch((err) => console.error('Erro ao pré-carregar modelos:', err.message));
 
-const FILTER_KEYBOARD = {
-  reply_markup: {
-    keyboard: [
-      ['👨 Homens', '👩 Mulheres'],
-      ['🚗🏍 Carro e Moto'],
-      ['99', 'UBER'],
-      ['🎲 Nome aleatório', '📝 Primeiro nome...'],
-      ['📊 Similaridade (40%, 50%, 60% ou TOP%)'],
-      ['✅ Confirmar']
-    ],
-    resize_keyboard: true
-  }
+// Menu de filtros em InlineKeyboardMarkup
+const FILTER_GROUPS = {
+  gender: [
+    { id: 'male', label: '👨 Homens', cb: 'gender_male' },
+    { id: 'female', label: '👱 Mulheres + R$', cb: 'gender_female' }
+  ],
+  vehicle: [
+    { id: 'car', label: '🚗 Carro', cb: 'vehicle_car' },
+    { id: 'motorcycle', label: '🏍️ Moto/Carro', cb: 'vehicle_motorcycle' }
+  ],
+  app: [
+    { id: '99', label: '99', cb: 'app_99' },
+    { id: 'uber', label: 'UBER', cb: 'app_uber' }
+  ],
+  name: [
+    { id: 'random', label: '🎲 Nome aleatório', cb: 'name_random' },
+    { id: 'first', label: '📝 Primeiro nome + ...', cb: 'name_first' }
+  ],
+  quality: [
+    { id: '40', label: '< 40%', cb: 'quality_40' },
+    { id: '50', label: '< 50%', cb: 'quality_50' },
+    { id: '60', label: '< 60%', cb: 'quality_60' },
+    { id: 'top', label: 'TOP%', cb: 'quality_top' }
+  ]
 };
+
+const REQUIRED_FILTERS = [
+  { group: 'gender', label: 'Sexo' },
+  { group: 'vehicle', label: 'Veículo' },
+  { group: 'app', label: 'Aplicativo' },
+  { group: 'name', label: 'Nome' }
+];
+
+function defaultMenuState() {
+  return { gender: null, vehicle: null, app: null, name: null, firstName: null, quality: 'top' };
+}
+
+function buildKeyboard(state) {
+  const rows = Object.keys(FILTER_GROUPS).map((group) =>
+    FILTER_GROUPS[group].map((opt) => ({
+      text: state[group] === opt.id ? `✅ ${opt.label}` : opt.label,
+      callback_data: opt.cb
+    }))
+  );
+  rows.push([{ text: '✅ Confirmar', callback_data: 'confirm' }]);
+  return { reply_markup: { inline_keyboard: rows } };
+}
+
+function updateSelection(state, callback) {
+  for (const group of Object.keys(FILTER_GROUPS)) {
+    const opt = FILTER_GROUPS[group].find((o) => o.cb === callback);
+    if (opt) {
+      state[group] = opt.id;
+      return { group, opt };
+    }
+  }
+  return null;
+}
+
+function validateSelections(state) {
+  const missing = REQUIRED_FILTERS.filter((r) => !state[r.group]);
+  if (missing.length) {
+    return { ok: false, missing: missing.map((r) => r.label) };
+  }
+  if (state.name === 'first' && !state.firstName) {
+    return { ok: false, missing: ['o primeiro nome (digite o nome)'] };
+  }
+  return { ok: true, missing: [] };
+}
+
+function menuStateToFilters(s) {
+  return {
+    gender: s.gender === 'male' ? 'homem' : s.gender === 'female' ? 'mulher' : null,
+    vehicle: s.vehicle === 'car' ? 'carro' : s.vehicle === 'motorcycle' ? 'moto' : null,
+    platform: s.app === 'uber' ? 'uber' : s.app === '99' ? '99' : null,
+    randomName: s.name === 'random',
+    firstName: s.firstName,
+    similarity: s.quality
+  };
+}
+
+function startSearch(chatId) {
+  const f = session[chatId];
+  if (!f) return bot.sendMessage(chatId, 'Envie uma foto primeiro.');
+  const parts = [];
+  if (f.gender) parts.push(f.gender);
+  if (f.vehicle) parts.push(f.vehicle);
+  if (f.platform) parts.push(f.platform);
+  if (f.randomName) parts.push('nome aleatório');
+  if (f.firstName) parts.push('nome: ' + f.firstName);
+  parts.push(f.similarity === 'top' ? 'similaridade TOP' : `similaridade ${f.similarity}%`);
+  bot.sendMessage(chatId, `🔎 Buscando com: ${parts.join(', ')}...`).catch(() => {});
+  return runSearch(chatId);
+}
 
 const SUPPORT_URL = 'https://t.me/alta_sc';
 
@@ -99,10 +180,6 @@ const session = {};
 const awaitingName = {};
 const awaitingRefill = {};
 const mesclaSessions = {};
-
-function defaultFilters() {
-  return { gender: null, vehicle: null, platform: null, randomName: false, firstName: null, similarity: 'top' };
-}
 
 function randomName() {
   return RANDOM_NAMES[Math.floor(Math.random() * RANDOM_NAMES.length)];
@@ -216,12 +293,12 @@ bot.on('photo', async (msg) => {
       return bot.sendMessage(chatId, 'Não encontrei nenhum rosto na foto. Tente outra imagem.');
     }
 
-    session[chatId] = { embedding, ...defaultFilters() };
+    session[chatId] = { embedding, ...defaultMenuState() };
     bot.deleteMessage(chatId, ack.message_id).catch(() => {});
     bot.sendMessage(
       chatId,
       '📸 Foto analisada!\n\nSelecione as opções abaixo.\nQuando terminar, toque em ✅ Confirmar para buscar tudo de uma vez.',
-      FILTER_KEYBOARD
+      buildKeyboard(session[chatId])
     );
   } catch (err) {
     console.error('Erro ao processar foto:', err.message);
@@ -586,50 +663,6 @@ bot.on('message', (msg) => {
     });
   }
 
-  const f = session[chatId];
-
-  switch (text) {
-    case '👨 Homens':
-      if (f) f.gender = 'homem';
-      return;
-    case '👩 Mulheres':
-      if (f) f.gender = 'mulher';
-      return;
-    case '🚗🏍 Carro e Moto':
-      if (f) f.vehicle = 'carro,moto';
-      return;
-    case '99':
-      if (f) f.platform = '99';
-      return;
-    case 'UBER':
-      if (f) f.platform = 'uber';
-      return;
-    case '🎲 Nome aleatório':
-      if (f) f.randomName = !f.randomName;
-      return;
-    case '📝 Primeiro nome...':
-      awaitingName[chatId] = true;
-      return bot.sendMessage(chatId, '✏️ Digite o primeiro nome para filtrar:');
-    case '📊 Similaridade (40%, 50%, 60% ou TOP%)':
-      if (f) {
-        const order = ['top', '40', '50', '60'];
-        f.similarity = order[(order.indexOf(f.similarity) + 1) % order.length];
-      }
-      return;
-    case '✅ Confirmar':
-      if (f) {
-        const parts = [];
-        if (f.gender) parts.push(f.gender);
-        if (f.vehicle) parts.push(f.vehicle);
-        if (f.platform) parts.push(f.platform);
-        if (f.randomName) parts.push('nome aleatório');
-        if (f.firstName) parts.push('nome: ' + f.firstName);
-        parts.push(f.similarity === 'top' ? 'similaridade TOP' : `similaridade ${f.similarity}%`);
-        bot.sendMessage(chatId, `🔎 Buscando com: ${parts.join(', ')}...`).catch(() => {});
-      }
-      return runSearch(chatId);
-  }
-
   switch (text) {
     case '🔎 PROCURAR BICO':
       return bot.sendMessage(
@@ -657,24 +690,45 @@ bot.on('callback_query', async (query) => {
   const chatId = query.message.chat.id;
   const data = query.data || '';
 
-  await bot.answerCallbackQuery(query.id);
-
   if (data === 'confirm_search') {
-    const f = session[chatId];
-    if (f) {
-      const parts = [];
-      if (f.gender) parts.push(f.gender);
-      if (f.vehicle) parts.push(f.vehicle);
-      if (f.platform) parts.push(f.platform);
-      if (f.randomName) parts.push('nome aleatório');
-      if (f.firstName) parts.push('nome: ' + f.firstName);
-      parts.push(f.similarity === 'top' ? 'similaridade TOP' : `similaridade ${f.similarity}%`);
-      bot.sendMessage(chatId, `🔎 Buscando com: ${parts.join(', ')}...`).catch(() => {});
+    await bot.answerCallbackQuery(query.id);
+    const st = session[chatId];
+    if (st) session[chatId] = { embedding: st.embedding, ...menuStateToFilters(st) };
+    return startSearch(chatId);
+  }
+
+  const f = session[chatId];
+  if (f) {
+    const selection = updateSelection(f, data);
+    if (selection) {
+      await bot.answerCallbackQuery(query.id);
+      await bot.editMessageReplyMarkup(buildKeyboard(f).reply_markup.inline_keyboard, {
+        chat_id: chatId,
+        message_id: query.message.message_id
+      }).catch(() => {});
+      if (selection.group === 'name' && selection.opt.id === 'first') {
+        awaitingName[chatId] = true;
+        return bot.sendMessage(chatId, '✏️ Digite o primeiro nome para filtrar:');
+      }
+      return;
     }
-    return runSearch(chatId);
+
+    if (data === 'confirm') {
+      const check = validateSelections(f);
+      if (!check.ok) {
+        return bot.answerCallbackQuery(query.id, {
+          text: `Faltou selecionar: ${check.missing.join(', ')}.`,
+          show_alert: true
+        });
+      }
+      await bot.answerCallbackQuery(query.id, { text: '🔎 Buscando...' });
+      session[chatId] = { embedding: f.embedding, ...menuStateToFilters(f) };
+      return startSearch(chatId);
+    }
   }
 
   if (!data.startsWith('unlock:')) return;
+  await bot.answerCallbackQuery(query.id);
   const faceId = Number(data.split(':')[1]);
 
   db.get('SELECT * FROM faces WHERE id = ?', [faceId], async (err, face) => {
