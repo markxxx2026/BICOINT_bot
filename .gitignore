@@ -6,20 +6,25 @@
 # Dependencias
 node_modules/
 
-# Banco de dados (dados reais)
+# Banco de dados (dados reais) — painel.db é mantido no repo para persistir na Render
 *.db
 *.sqlite
 *.sqlite3
 *.db-journal
 *.db-wal
 *.db-shm
+!projeto/database/painel.db
 
 # Logs
 logs/
 projeto/logs/
 
-# Fotos/dados pessoais
-projeto/painel/faces/
+# Fotos/dados pessoais — faces/ é mantida no repo para persistir na Render (só imagens)
+projeto/painel/faces/*
+!projeto/painel/faces/*.jpg
+!projeto/painel/faces/*.jpeg
+!projeto/painel/faces/*.png
+!projeto/painel/faces/*.webp
 projeto/painel/blurred/
 projeto/painel/uploads/
 projeto/tmp/

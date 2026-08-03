@@ -39,6 +39,16 @@ process.on('unhandledRejection', (reason) => {
 
 console.log('Bot iniciado com sucesso!');
 
+db.get(
+  'SELECT COUNT(*) AS total, SUM(sold) AS sold, SUM(COALESCE(antecedentes, 0)) AS ant FROM faces',
+  (err, row) => {
+    if (err) return console.error('[DB] erro ao contar faces:', err.message);
+    const total = row ? row.total : 0;
+    const disp = total - (row.sold || 0) - (row.ant || 0);
+    console.log(`[DB] faces=${total} vendidas=${row.sold || 0} antecedentes=${row.ant || 0} disponiveis=${disp}`);
+  }
+);
+
 faceService.warmup()
   .then(async () => {
     const photosDir = path.join(__dirname, '..', 'painel', 'faces');
