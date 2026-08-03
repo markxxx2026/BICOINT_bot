@@ -723,10 +723,14 @@ bot.on('callback_query', async (query) => {
     const selection = updateSelection(f, data);
     if (selection) {
       await bot.answerCallbackQuery(query.id);
-      await bot.editMessageReplyMarkup(buildKeyboard(f).reply_markup.inline_keyboard, {
-        chat_id: chatId,
-        message_id: query.message.message_id
-      }).catch(() => {});
+      try {
+        await bot.editMessageReplyMarkup(buildKeyboard(f).reply_markup, {
+          chat_id: chatId,
+          message_id: query.message.message_id
+        });
+      } catch (err) {
+        console.error('Erro ao atualizar teclado:', err.message);
+      }
       if (selection.group === 'name' && selection.opt.id === 'first') {
         awaitingName[chatId] = true;
         return bot.sendMessage(chatId, '✏️ Digite o primeiro nome para filtrar:');
