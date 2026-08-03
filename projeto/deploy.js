@@ -24,14 +24,24 @@ app.post('/webhook/telegram', (req, res) => {
   res.sendStatus(200);
 });
 
-(async () => {
-  if (WEBHOOK_URL) {
+async function registerWebhook() {
+  for (let attempt = 1; attempt <= 5; attempt++) {
     try {
       await bot.setWebHook(WEBHOOK_URL);
       console.log('Webhook configurado:', WEBHOOK_URL);
+      return true;
     } catch (e) {
-      console.error('Erro ao configurar webhook:', e.message);
+      console.error(`Erro ao configurar webhook (tentativa ${attempt}/5):`, e.message);
+      if (attempt < 5) await new Promise((r) => setTimeout(r, 10000));
     }
+  }
+  console.error('Não foi possível registrar o webhook após 5 tentativas.');
+  return false;
+}
+
+(async () => {
+  if (WEBHOOK_URL) {
+    await registerWebhook();
   } else {
     console.log('TELEGRAM_WEBHOOK_URL vazio — bot em modo polling.');
   }
