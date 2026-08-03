@@ -320,16 +320,9 @@ async function runSearch(chatId) {
       }
     }
 
-    const name = f.randomName ? randomName() : match.face.name;
-    const firstNameLine = f.firstName ? `\nPrimeiro nome: ${f.firstName}` : '';
-
     const caption =
-      `🎯 Rosto compatível encontrado!\n\n` +
-      `ID: ${match.face.id}\n` +
-      `Nome: ${name}\n` +
-      `Similaridade: ${match.similarity}%` +
-      firstNameLine +
-      `\n\n🔒 Foto borrada. Clique abaixo para ver a versão completa.`;
+      `Encontramos uma possível correspondência.\n\n` +
+      `Para desbloquear a foto em alta qualidade e visualizar todas as informações, realize o pagamento abaixo.`;
 
     bot.sendChatAction(chatId, 'upload_photo').catch(() => {});
     const blurredPath = await blur.ensureBlurred(match.face.photo);
@@ -338,7 +331,7 @@ async function runSearch(chatId) {
         caption,
         reply_markup: {
           inline_keyboard: [[
-            { text: '💰 Ver foto completa', callback_data: `unlock:${match.face.id}` }
+            { text: '💰 Pagar e desbloquear', callback_data: `unlock:${match.face.id}` }
           ]]
         }
       });
@@ -347,10 +340,74 @@ async function runSearch(chatId) {
     }
 
     delete session[chatId];
+
+    // QR Code PIX gerado automaticamente no momento da correspondência.
+    try {
+      await generatePixUnlock(chatId, match.face);
+    } catch (err3) {
+      console.error('Erro ao gerar PIX automático:', err3.message);
+      bot.sendMessage(chatId, '⚠️ Não consegui gerar o PIX. Toque em "💰 Pagar e desbloquear" para tentar novamente.').catch(() => {});
+    }
   } catch (err) {
     console.error('Erro na busca:', err.message);
     bot.sendMessage(chatId, 'Ocorreu um erro durante a busca. Tente novamente.');
   }
+}
+
+// Gera (ou reutiliza) a cobrança PIX de um produto. Evita cobranças duplicadas.
+async function generatePixUnlock(chatId, face) {
+  if (!process.env.ASAAS_API_KEY) {
+    return bot.sendMessage(chatId, '⚠️ Pagamento PIX ainda não configurado. Fale com o suporte.');
+  }
+  const amount = Number(process.env.PRICE_FULL_PHOTO || 10);
+
+  const existing = await new Promise((resolve, reject) => {
+    db.get(
+      "SELECT id, asaas_id FROM unlocks WHERE chat_id = ? AND face_id = ? AND status = 'pendente' AND asaas_id IS NOT NULL AND asaas_id != '' ORDER BY id DESC LIMIT 1",
+      [chatId, face.id],
+      (err, row) => (err ? reject(err) : resolve(row))
+    );
+  });
+
+  let asaasId;
+  if (existing && existing.asaas_id) {
+    asaasId = existing.asaas_id;
+  } else {
+    const externalReference = `BICO${chatId}_${face.id}_${Date.now()}`;
+    const payment = await asaas.createPixPayment({
+      chatId,
+      value: amount,
+      externalReference,
+      description: `Foto completa ${face.name} (ID ${face.id})`
+    });
+    asaasId = payment.id;
+    await new Promise((resolve, reject) => {
+      db.run(
+        `INSERT INTO unlocks (chat_id, face_id, amount, pix_code, asaas_id, status) VALUES (?, ?, ?, ?, ?, 'pendente')`,
+        [chatId, face.id, amount, null, payment.id],
+        (err) => (err ? reject(err) : resolve())
+      );
+    });
+  }
+
+  const qr = await asaas.getPixQrCode(asaasId);
+  let qrBuffer;
+  if (qr.encodedImage) {
+    qrBuffer = Buffer.from(String(qr.encodedImage).replace(/^data:image\/\w+;base64,/, ''), 'base64');
+  }
+  if (!qrBuffer || !qrBuffer.length) {
+    qrBuffer = await renderPixQr(qr.payload);
+  }
+
+  await bot.sendPhoto(chatId, qrBuffer, {
+    caption:
+      `💰 <b>Pagamento PIX</b>\n\n` +
+      `Valor: R$ ${amount.toFixed(2).replace('.', ',')}\n\n` +
+      `PIX Copia e Cola:\n` +
+      `<code>${qr.payload}</code>\n\n` +
+      `Assim que o pagamento for confirmado, a foto em alta qualidade e todas as informações serão enviadas aqui automaticamente.`,
+    parse_mode: 'HTML'
+  });
 }
 
 async function playSearchAnimation(chatId) {
@@ -660,53 +717,11 @@ bot.on('callback_query', async (query) => {
       }
 
       try {
-        if (!process.env.ASAAS_API_KEY) {
-          return bot.sendMessage(chatId, '⚠️ Pagamento PIX ainda não configurado. Fale com o suporte.');
-        }
-
-        const externalReference = `BICO${chatId}_${faceId}_${Date.now()}`;
-
-      bot.sendMessage(chatId, '🔄 Gerando cobrança PIX...').catch(() => {});
-
-      const payment = await asaas.createPixPayment({
-        chatId,
-        value: amount,
-        externalReference,
-        description: `Foto completa ${face.name} (ID ${faceId})`
-      });
-
-      const qr = await asaas.getPixQrCode(payment.id);
-
-      db.run(
-        `INSERT INTO unlocks (chat_id, face_id, amount, pix_code, asaas_id, status) VALUES (?, ?, ?, ?, ?, 'pendente')`,
-        [chatId, faceId, amount, qr.payload || null, payment.id],
-        async (err2) => {
-          if (err2) return bot.sendMessage(chatId, 'Erro ao gerar o pagamento.');
-
-          let qrBuffer;
-          if (qr.encodedImage) {
-            qrBuffer = Buffer.from(String(qr.encodedImage).replace(/^data:image\/\w+;base64,/, ''), 'base64');
-          }
-          if (!qrBuffer || !qrBuffer.length) {
-            qrBuffer = await renderPixQr(qr.payload);
-          }
-
-          await bot.sendPhoto(chatId, qrBuffer, {
-            caption:
-              `💰 Pagamento PIX\n\n` +
-              `Para ver a foto completa, pague ` +
-              `${amount.toFixed(2).replace('.', ',')} via PIX.\n\n` +
-              `PIX Copia e Cola:\n` +
-              `<code>${qr.payload}</code>\n\n` +
-              `Assim que o pagamento for confirmado, a foto em alta qualidade será enviada aqui.`,
-            parse_mode: 'HTML'
-          });
-        }
-      );
-    } catch (err2) {
-      console.error('Erro ao gerar unlock:', err2.message);
-      bot.sendMessage(chatId, 'Erro ao gerar o pagamento. Tente novamente.');
-    }
+        await generatePixUnlock(chatId, face);
+      } catch (err2) {
+        console.error('Erro ao gerar unlock:', err2.message);
+        bot.sendMessage(chatId, 'Erro ao gerar o pagamento. Tente novamente.');
+      }
   });
   });
 });
