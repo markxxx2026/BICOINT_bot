@@ -40,3 +40,17 @@ app.post('/webhook/telegram', (req, res) => {
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Servidor de deploy rodando na porta ${PORT}`);
 });
+
+// Keepalive: o plano free da Render "dorme" após ~15 min sem requisições,
+// fazendo o webhook do Telegram receber 502. Um ping no próprio serviço a
+// cada 5 min conta como atividade e mantém a instância acordada 24/7.
+const keepaliveHost = (WEBHOOK_URL || '').replace(/^https?:\/\//, '').split('/')[0];
+if (keepaliveHost) {
+  const keepaliveUrl = `https://${keepaliveHost}/login`;
+  console.log(`Keepalive ativo -> ${keepaliveUrl} (a cada 5 min)`);
+  setInterval(() => {
+    fetch(keepaliveUrl, { signal: AbortSignal.timeout(20000) }).catch(() => {});
+  }, 5 * 60 * 1000);
+} else {
+  console.log('Keepalive desativado (sem TELEGRAM_WEBHOOK_URL para derivar a URL).');
+}
