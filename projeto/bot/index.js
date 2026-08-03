@@ -76,12 +76,15 @@ const FILTER_GROUPS = {
     { id: 'random', label: '🎲 Nome aleatório', cb: 'name_random' },
     { id: 'first', label: '📝 Primeiro nome + ...', cb: 'name_first' }
   ],
-  quality: [
-    { id: '40', label: '< 40%', cb: 'quality_40' },
-    { id: '50', label: '< 50%', cb: 'quality_50' },
-    { id: '60', label: '< 60%', cb: 'quality_60' },
-    { id: 'top', label: 'TOP%', cb: 'quality_top' }
-  ]
+  quality: {
+    mark: '🟢',
+    options: [
+      { id: '40', label: '40%', cb: 'quality_40' },
+      { id: '50', label: '50%', cb: 'quality_50' },
+      { id: '60', label: '60%', cb: 'quality_60' },
+      { id: 'top', label: 'TOP%', cb: 'quality_top' }
+    ]
+  }
 };
 
 const REQUIRED_FILTERS = [
@@ -96,19 +99,24 @@ function defaultMenuState() {
 }
 
 function buildKeyboard(state) {
-  const rows = Object.keys(FILTER_GROUPS).map((group) =>
-    FILTER_GROUPS[group].map((opt) => ({
-      text: state[group] === opt.id ? `✅ ${opt.label}` : opt.label,
+  const rows = Object.keys(FILTER_GROUPS).map((group) => {
+    const def = FILTER_GROUPS[group];
+    const opts = Array.isArray(def) ? def : def.options;
+    const mark = Array.isArray(def) ? '✅' : (def.mark || '✅');
+    return opts.map((opt) => ({
+      text: state[group] === opt.id ? `${mark} ${opt.label}` : opt.label,
       callback_data: opt.cb
-    }))
-  );
+    }));
+  });
   rows.push([{ text: '✅ Confirmar', callback_data: 'confirm' }]);
   return { reply_markup: { inline_keyboard: rows } };
 }
 
 function updateSelection(state, callback) {
   for (const group of Object.keys(FILTER_GROUPS)) {
-    const opt = FILTER_GROUPS[group].find((o) => o.cb === callback);
+    const def = FILTER_GROUPS[group];
+    const opts = Array.isArray(def) ? def : def.options;
+    const opt = opts.find((o) => o.cb === callback);
     if (opt) {
       state[group] = opt.id;
       return { group, opt };
