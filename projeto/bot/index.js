@@ -321,7 +321,8 @@ async function runSearch(chatId) {
     }
 
     const caption =
-      `Encontramos uma possível correspondência.\n\n` +
+      `Encontramos uma possível correspondência.\n` +
+      `📊 Similaridade: ${match.similarity}%.\n\n` +
       `Para desbloquear a foto em alta qualidade e visualizar todas as informações, realize o pagamento abaixo.`;
 
     bot.sendChatAction(chatId, 'upload_photo').catch(() => {});
