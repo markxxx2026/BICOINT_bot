@@ -12,9 +12,10 @@ let backendReady = false;
 
 async function ensureModels() {
   if (!backendReady) {
-    wasm.setThreadsCount(2);
+    wasm.setThreadsCount(1);
     await tf.setBackend('wasm');
     await tf.ready();
+    console.log(`[face] backend WASM pronto: ${tf.getBackend()} | threads=1`);
     backendReady = true;
   }
   if (modelsLoaded) return;
@@ -22,10 +23,13 @@ async function ensureModels() {
   await faceapi.nets.faceLandmark68Net.loadFromDisk(MODELS_PATH);
   await faceapi.nets.faceRecognitionNet.loadFromDisk(MODELS_PATH);
   modelsLoaded = true;
+  console.log('[face] modelos carregados:', MODELS_PATH);
 }
 
 async function bufferToTensor(buffer) {
   const img = await Jimp.read(buffer);
+  const origW = img.width;
+  const origH = img.height;
   const maxDim = Math.max(img.width, img.height);
   if (maxDim > 900) {
     img.scale(900 / maxDim);
@@ -39,6 +43,7 @@ async function bufferToTensor(buffer) {
     rgb[j + 1] = data[i + 1];
     rgb[j + 2] = data[i + 2];
   }
+  console.log(`[face] imagem ${origW}x${origH} -> tensor ${width}x${height} (${buffer.length} bytes)`);
   return tf.tensor3d(rgb, [height, width, 3]);
 }
 
@@ -46,23 +51,41 @@ async function extractEmbedding(buffer, opts = {}) {
   await ensureModels();
   const tensor = await bufferToTensor(buffer);
   try {
-    const options = new faceapi.TinyFaceDetectorOptions({ inputSize: opts.inputSize || 320, scoreThreshold: 0.3 });
-    let det = await faceapi
-      .detectSingleFace(tensor, options)
-      .withFaceLandmarks()
-      .withFaceDescriptor();
-    if (!det) {
-      const all = await faceapi
-        .detectAllFaces(tensor, options)
-        .withFaceLandmarks()
-        .withFaceDescriptors();
-      if (all && all.length) {
-        all.sort((a, b) => b.detection.score - a.detection.score);
-        det = all[0];
+    const sizes = opts.inputSizes || [416, 320, 256];
+    const thresholds = opts.thresholds || [0.3, 0.2, 0.1];
+    for (const inputSize of sizes) {
+      for (const scoreThreshold of thresholds) {
+        const options = new faceapi.TinyFaceDetectorOptions({ inputSize, scoreThreshold });
+        let det = null;
+        try {
+          det = await faceapi.detectSingleFace(tensor, options).withFaceLandmarks().withFaceDescriptor();
+        } catch (e) {
+          console.warn(`[face] detectSingleFace inputSize=${inputSize} th=${scoreThreshold} erro: ${e.message}`);
+        }
+        if (!det) {
+          try {
+            const all = await faceapi.detectAllFaces(tensor, options).withFaceLandmarks().withFaceDescriptors();
+            if (all && all.length) {
+              all.sort((a, b) => b.detection.score - a.detection.score);
+              det = all[0];
+            }
+          } catch (e) {
+            console.warn(`[face] detectAllFaces inputSize=${inputSize} th=${scoreThreshold} erro: ${e.message}`);
+          }
+        }
+        if (det) {
+          const desc = Array.from(det.descriptor);
+          if (!desc.every((v) => Number.isFinite(v))) {
+            console.warn(`[face] descritor com NaN/infinito (inputSize=${inputSize} th=${scoreThreshold}) — ignorado`);
+            continue;
+          }
+          console.log(`[face] rosto detectado inputSize=${inputSize} score=${det.detection.score.toFixed(3)}`);
+          return desc;
+        }
       }
     }
-    if (!det) return null;
-    return Array.from(det.descriptor);
+    console.log('[face] NENHUM rosto detectado em nenhuma combinação de parâmetros');
+    return null;
   } finally {
     tensor.dispose();
   }
@@ -74,8 +97,9 @@ async function warmup() {
     const t = tf.zeros([inputSize, inputSize, 3]);
     try {
       await faceapi.detectSingleFace(t, new faceapi.TinyFaceDetectorOptions({ inputSize })).withFaceLandmarks().withFaceDescriptor();
+      console.log(`[face] warmup OK inputSize=${inputSize}`);
     } catch (e) {
-      console.error('Warmup falhou:', e.message);
+      console.error('[face] warmup falhou:', e.message);
     } finally {
       t.dispose();
     }

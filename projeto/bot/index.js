@@ -40,13 +40,18 @@ process.on('unhandledRejection', (reason) => {
 console.log('Bot iniciado com sucesso!');
 
 faceService.warmup()
-  .then(() => {
+  .then(async () => {
     const photosDir = path.join(__dirname, '..', 'painel', 'faces');
-    const candidates = ['1004.jpg', '1005.jpg', '1006.jpg'];
+    const candidates = ['1003.jpg', '1004.jpg', '1005.jpg'];
     for (const c of candidates) {
       const fp = path.join(photosDir, c);
-      if (fs.existsSync(fp)) {
-        return faceService.extractEmbedding(fs.readFileSync(fp));
+      if (!fs.existsSync(fp)) continue;
+      try {
+        const t0 = Date.now();
+        const emb = await faceService.extractEmbedding(fs.readFileSync(fp));
+        console.log(`[SELFTEST] ${c} -> rosto ${emb ? 'OK (128)' : 'NULL'} em ${Date.now() - t0}ms`);
+      } catch (e) {
+        console.error(`[SELFTEST] ${c} -> ERRO: ${e.message}`);
       }
     }
   })
@@ -203,7 +208,9 @@ bot.on('photo', async (msg) => {
     const buffer = fs.readFileSync(filePath);
     fs.unlinkSync(filePath);
 
+    const t0 = Date.now();
     const embedding = await faceService.extractEmbedding(buffer);
+    console.log(`[FOTO] chat=${chatId} bytes=${buffer.length} resultado=${embedding ? 'OK' : 'NULL'} tempo=${Date.now() - t0}ms`);
     if (!embedding) {
       bot.deleteMessage(chatId, ack.message_id).catch(() => {});
       return bot.sendMessage(chatId, 'Não encontrei nenhum rosto na foto. Tente outra imagem.');
