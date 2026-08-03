@@ -103,12 +103,16 @@ function buildKeyboard(state) {
     const def = FILTER_GROUPS[group];
     const opts = Array.isArray(def) ? def : def.options;
     const mark = Array.isArray(def) ? '✅' : (def.mark || '✅');
-    return opts.map((opt) => ({
-      text: state[group] === opt.id ? `${mark} ${opt.label}` : opt.label,
-      callback_data: opt.cb
-    }));
+    return opts.map((opt) => {
+      const selected = state[group] === opt.id;
+      return {
+        text: selected ? `${mark} ${opt.label}` : opt.label,
+        callback_data: opt.cb,
+        ...(selected ? { style: 'success' } : {})
+      };
+    });
   });
-  rows.push([{ text: '✅ Confirmar', callback_data: 'confirm' }]);
+  rows.push([{ text: '✅ Confirmar', callback_data: 'confirm', style: 'success' }]);
   return { reply_markup: { inline_keyboard: rows } };
 }
 
@@ -417,7 +421,7 @@ async function runSearch(chatId) {
         caption,
         reply_markup: {
           inline_keyboard: [[
-            { text: '💰 Pagar e desbloquear', callback_data: `unlock:${match.face.id}` }
+            { text: '💰 Pagar e desbloquear', callback_data: `unlock:${match.face.id}`, style: 'success' }
           ]]
         }
       });
@@ -665,7 +669,7 @@ bot.on('message', (msg) => {
     return bot.sendMessage(chatId, `✅ Primeiro nome definido: "${text}".`, {
       reply_markup: {
         inline_keyboard: [[
-          { text: '🔎 Buscar e confirmar compra', callback_data: 'confirm_search' }
+          { text: '🔎 Buscar e confirmar compra', callback_data: 'confirm_search', style: 'success' }
         ]]
       }
     });
