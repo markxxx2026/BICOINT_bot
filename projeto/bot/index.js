@@ -40,12 +40,17 @@ process.on('unhandledRejection', (reason) => {
 console.log('Bot iniciado com sucesso!');
 
 db.get(
-  'SELECT COUNT(*) AS total, SUM(sold) AS sold, SUM(COALESCE(antecedentes, 0)) AS ant FROM faces',
+  `SELECT COUNT(*) AS total,
+    SUM(CASE WHEN COALESCE(sold_uber, 0) = 1 OR COALESCE(sold_99, 0) = 1 THEN 1 ELSE 0 END) AS vend,
+    SUM(COALESCE(antecedentes, 0)) AS ant,
+    SUM(CASE WHEN COALESCE(antecedentes, 0) = 0 AND (
+      (platform IN ('uber','uberx99') AND COALESCE(sold_uber, 0) = 0) OR
+      (platform IN ('99','uberx99') AND COALESCE(sold_99, 0) = 0)) THEN 1 ELSE 0 END) AS disp
+  FROM faces`,
   (err, row) => {
     if (err) return console.error('[DB] erro ao contar faces:', err.message);
     const total = row ? row.total : 0;
-    const disp = total - (row.sold || 0) - (row.ant || 0);
-    console.log(`[DB] faces=${total} vendidas=${row.sold || 0} antecedentes=${row.ant || 0} disponiveis=${disp}`);
+    console.log(`[DB] faces=${total} vendidas=${row ? row.vend || 0 : 0} antecedentes=${row ? row.ant || 0 : 0} disponiveis=${row ? row.disp || 0 : 0}`);
   }
 );
 
@@ -373,7 +378,7 @@ async function runSearch(chatId) {
   try {
     await playSearchAnimation(chatId);
 
-    const where = ['COALESCE(sold, 0) = 0', 'COALESCE(antecedentes, 0) = 0'];
+    const where = ['COALESCE(antecedentes, 0) = 0'];
     const params = [];
     if (f.gender) { where.push('gender = ?'); params.push(f.gender); }
     if (f.vehicle) {
@@ -388,10 +393,10 @@ async function runSearch(chatId) {
     }
     if (f.platform) {
       if (f.platform === 'uber') {
-        where.push('(platform = ? OR platform = ?)');
+        where.push('platform IN (?, ?)', 'COALESCE(sold_uber, 0) = 0');
         params.push('uber', 'uberx99');
       } else if (f.platform === '99') {
-        where.push('(platform = ? OR platform = ?)');
+        where.push('platform IN (?, ?)', 'COALESCE(sold_99, 0) = 0');
         params.push('99', 'uberx99');
       } else {
         where.push('platform = ?');
@@ -423,6 +428,8 @@ async function runSearch(chatId) {
       `📊 Similaridade: ${match.similarity}%.\n\n` +
       `Para desbloquear a foto em alta qualidade e visualizar todas as informações, realize o pagamento abaixo.`;
 
+    const chosenPlatform = f.platform && (f.platform === 'uber' || f.platform === '99') ? f.platform : null;
+
     bot.sendChatAction(chatId, 'upload_photo').catch(() => {});
     const blurredPath = await blur.ensureBlurred(match.face.photo);
     if (blurredPath) {
@@ -430,7 +437,7 @@ async function runSearch(chatId) {
         caption,
         reply_markup: {
           inline_keyboard: [[
-            { text: '💰 Pagar e desbloquear', callback_data: `unlock:${match.face.id}`, style: 'success' }
+            { text: '💰 Pagar e desbloquear', callback_data: `unlock:${match.face.id}:${chosenPlatform || ''}`, style: 'success' }
           ]]
         }
       });
@@ -442,7 +449,7 @@ async function runSearch(chatId) {
 
     // QR Code PIX gerado automaticamente no momento da correspondência.
     try {
-      await generatePixUnlock(chatId, match.face);
+      await generatePixUnlock(chatId, match.face, chosenPlatform);
     } catch (err3) {
       console.error('Erro ao gerar PIX automático:', err3.message);
       bot.sendMessage(chatId, '⚠️ Não consegui gerar o PIX. Toque em "💰 Pagar e desbloquear" para tentar novamente.').catch(() => {});
@@ -454,7 +461,7 @@ async function runSearch(chatId) {
 }
 
 // Gera (ou reutiliza) a cobrança PIX de um produto. Evita cobranças duplicadas.
-async function generatePixUnlock(chatId, face) {
+async function generatePixUnlock(chatId, face, platform) {
   if (!process.env.ASAAS_API_KEY) {
     return bot.sendMessage(chatId, '⚠️ Pagamento PIX ainda não configurado. Fale com o suporte.');
   }
@@ -462,8 +469,8 @@ async function generatePixUnlock(chatId, face) {
 
   const existing = await new Promise((resolve, reject) => {
     db.get(
-      "SELECT id, asaas_id FROM unlocks WHERE chat_id = ? AND face_id = ? AND status = 'pendente' AND asaas_id IS NOT NULL AND asaas_id != '' ORDER BY id DESC LIMIT 1",
-      [chatId, face.id],
+      "SELECT id, asaas_id FROM unlocks WHERE chat_id = ? AND face_id = ? AND COALESCE(platform, '') = ? AND status = 'pendente' AND asaas_id IS NOT NULL AND asaas_id != '' ORDER BY id DESC LIMIT 1",
+      [chatId, face.id, platform || ''],
       (err, row) => (err ? reject(err) : resolve(row))
     );
   });
@@ -472,18 +479,18 @@ async function generatePixUnlock(chatId, face) {
   if (existing && existing.asaas_id) {
     asaasId = existing.asaas_id;
   } else {
-    const externalReference = `BICO${chatId}_${face.id}_${Date.now()}`;
+    const externalReference = `BICO${chatId}_${face.id}_${platform || 'x'}_${Date.now()}`;
     const payment = await asaas.createPixPayment({
       chatId,
       value: amount,
       externalReference,
-      description: `Foto completa ${face.name} (ID ${face.id})`
+      description: `Foto completa ${face.name} (ID ${face.id})${platform ? ' - ' + platform.toUpperCase() : ''}`
     });
     asaasId = payment.id;
     await new Promise((resolve, reject) => {
       db.run(
-        `INSERT INTO unlocks (chat_id, face_id, amount, pix_code, asaas_id, status) VALUES (?, ?, ?, ?, ?, 'pendente')`,
-        [chatId, face.id, amount, null, payment.id],
+        `INSERT INTO unlocks (chat_id, face_id, amount, pix_code, asaas_id, platform, status) VALUES (?, ?, ?, ?, ?, ?, 'pendente')`,
+        [chatId, face.id, amount, null, payment.id, platform || null],
         (err) => (err ? reject(err) : resolve())
       );
     });
@@ -754,15 +761,30 @@ bot.on('callback_query', async (query) => {
 
   if (!data.startsWith('unlock:')) return;
   await bot.answerCallbackQuery(query.id);
-  const faceId = Number(data.split(':')[1]);
+  const parts = data.split(':');
+  const faceId = Number(parts[1]);
+  const platform = parts[2] && parts[2].trim() ? parts[2].trim() : null;
 
   db.get('SELECT * FROM faces WHERE id = ?', [faceId], async (err, face) => {
     if (err || !face) return bot.sendMessage(chatId, 'Face não encontrada.');
     if (face.antecedentes) {
       return bot.sendMessage(chatId, '⚠️ Produto indisponível.');
     }
-    if (face.sold) {
-      return bot.sendMessage(chatId, '⚠️ Este produto já foi vendido.');
+    if (platform && platform !== 'uber' && platform !== '99') {
+      return bot.sendMessage(chatId, '⚠️ Categoria inválida.');
+    }
+    if (platform === 'uber' && face.platform !== 'uber' && face.platform !== 'uberx99') {
+      return bot.sendMessage(chatId, '⚠️ Produto não disponível na categoria UBER.');
+    }
+    if (platform === '99' && face.platform !== '99' && face.platform !== 'uberx99') {
+      return bot.sendMessage(chatId, '⚠️ Produto não disponível na categoria 99.');
+    }
+    const soldThisPlatform =
+      platform === 'uber' ? (face.sold_uber || 0) :
+      platform === '99' ? (face.sold_99 || 0) :
+      (face.sold || 0);
+    if (soldThisPlatform) {
+      return bot.sendMessage(chatId, '⚠️ Este produto já foi vendido nessa categoria.');
     }
 
     const amount = PRICE;
@@ -774,10 +796,10 @@ bot.on('callback_query', async (query) => {
           [novoSaldo, chatId]
         );
         db.run(
-          "INSERT INTO unlocks (chat_id, face_id, amount, status, notified) VALUES (?, ?, ?, 'pago', 1)",
-          [chatId, faceId, 0]
+          "INSERT INTO unlocks (chat_id, face_id, amount, platform, status, notified) VALUES (?, ?, ?, ?, 'pago', 1)",
+          [chatId, faceId, 0, platform]
         );
-        db.run('UPDATE faces SET sold = 1 WHERE id = ?', [faceId]);
+        markSold(faceId, platform);
 
         bot.sendMessage(
           chatId,
@@ -797,7 +819,7 @@ bot.on('callback_query', async (query) => {
       }
 
       try {
-        await generatePixUnlock(chatId, face);
+        await generatePixUnlock(chatId, face, platform);
       } catch (err2) {
         console.error('Erro ao gerar unlock:', err2.message);
         bot.sendMessage(chatId, 'Erro ao gerar o pagamento. Tente novamente.');
@@ -805,6 +827,15 @@ bot.on('callback_query', async (query) => {
   });
   });
 });
+
+function markSold(faceId, platform) {
+  const col = platform === 'uber' ? 'sold_uber' : platform === '99' ? 'sold_99' : null;
+  if (col) {
+    db.run(`UPDATE faces SET ${col} = 1, sold = 1 WHERE id = ?`, [faceId]);
+  } else {
+    db.run('UPDATE faces SET sold = 1 WHERE id = ?', [faceId]);
+  }
+}
 
 function unlockCaption(face) {
   let c = `✅ Compra liberada!\n\nID: ${face.id}\nNome: ${face.name}`;
@@ -857,7 +888,7 @@ async function checkAsaasPayments() {
               "UPDATE unlocks SET status = 'pago', paid_at = datetime('now','localtime') WHERE id = ? AND status = 'pendente'",
               [u.id]
             );
-            db.run('UPDATE faces SET sold = 1 WHERE id = ?', [u.face_id]);
+            markSold(u.face_id, u.platform);
             console.log(`Pagamento Asaas confirmado: unlock ${u.id} (${status})`);
           }
         } catch (e) {

@@ -100,19 +100,28 @@ app.get('/logout', (req, res) => {
   res.redirect('/login');
 });
 
+const AVAILABLE_SQL =
+  "COALESCE(antecedentes, 0) = 0 AND (" +
+  "(platform IN ('uber','uberx99') AND COALESCE(sold_uber, 0) = 0) OR " +
+  "(platform IN ('99','uberx99') AND COALESCE(sold_99, 0) = 0))";
+
 app.get('/dashboard', auth, async (req, res) => {
   try {
     const q = (sql, p = []) => new Promise((res2, rej) => db.get(sql, p, (e, r) => (e ? rej(e) : res2(r))));
     const [admins, faces, sold, users, unlockRev, refillRev, pendingU, pendingR] = await Promise.all([
       q('SELECT COUNT(*) AS total FROM admins'),
-      q('SELECT COUNT(*) AS total FROM faces'),
-      q('SELECT COUNT(*) AS total FROM faces WHERE sold = 1'),
+      q(`SELECT COUNT(*) AS total FROM faces WHERE ${AVAILABLE_SQL}`),
+      q('SELECT COUNT(*) AS total FROM faces WHERE COALESCE(sold_uber, 0) = 1 OR COALESCE(sold_99, 0) = 1'),
       q('SELECT COUNT(*) AS total FROM bot_users'),
       q("SELECT COALESCE(SUM(amount),0) AS total FROM unlocks WHERE status = 'pago'"),
       q("SELECT COALESCE(SUM(amount),0) AS total FROM refills WHERE status = 'pago'"),
       q("SELECT COUNT(*) AS total FROM unlocks WHERE status = 'pendente'"),
       q("SELECT COUNT(*) AS total FROM refills WHERE status = 'pendente'")
     ]);
+    const adminsList = await new Promise((res2, rej) => db.all(
+      'SELECT id, username, created_at FROM admins ORDER BY id',
+      (e, r) => (e ? rej(e) : res2(r))
+    ));
     const payments = await new Promise((res2, rej) => db.all(
       `SELECT 'unlock' AS tipo, id, chat_id, amount, status, created_at, ('Foto #' || face_id) AS descricao FROM unlocks
        UNION ALL
@@ -135,6 +144,7 @@ app.get('/dashboard', auth, async (req, res) => {
       },
       payments,
       gifts,
+      adminsList,
       newGift: req.query.gift || null
     });
   } catch (err) {
@@ -175,8 +185,10 @@ app.post('/upload', auth, upload.single('file'), (req, res) => {
   res.json({ ok: true, filename: req.file.filename });
 });
 
+const LIST_SQL = 'SELECT * FROM faces WHERE COALESCE(antecedentes, 0) = 0 ORDER BY id';
+
 app.get('/cadastrar-face', auth, (req, res) => {
-  db.all('SELECT * FROM faces WHERE COALESCE(sold, 0) = 0 AND COALESCE(antecedentes, 0) = 0 ORDER BY id', (err, faces) => {
+  db.all(LIST_SQL, (err, faces) => {
     if (err) return res.status(500).send(err.message);
     res.render('cadastrar-face', { error: null, success: null, faces });
   });
@@ -184,7 +196,7 @@ app.get('/cadastrar-face', auth, (req, res) => {
 
 app.post('/cadastrar-face', auth, faceUpload.single('foto'), async (req, res) => {
   const render = (error, success) => {
-    db.all('SELECT * FROM faces WHERE COALESCE(sold, 0) = 0 AND COALESCE(antecedentes, 0) = 0 ORDER BY id', (err, faces) => {
+    db.all(LIST_SQL, (err, faces) => {
       if (err) return res.status(500).send(err.message);
       res.render('cadastrar-face', { error, success, faces });
     });
@@ -252,6 +264,61 @@ app.post('/faces/:id/antecedentes', auth, (req, res) => {
   });
 });
 
+app.get('/faces/:id/editar', auth, (req, res) => {
+  const id = Number(req.params.id);
+  db.get('SELECT * FROM faces WHERE id = ?', [id], (err, face) => {
+    if (err) return res.status(500).send(err.message);
+    if (!face) return res.status(404).send('Face não encontrada.');
+    res.render('editar-face', { face, error: null, success: null });
+  });
+});
+
+app.post('/faces/:id/editar', auth, faceUpload.single('foto'), (req, res) => {
+  const id = Number(req.params.id);
+  db.get('SELECT * FROM faces WHERE id = ?', [id], async (err, face) => {
+    if (err) return res.status(500).send(err.message);
+    if (!face) return res.status(404).send('Face não encontrada.');
+    const render = (error, success) =>
+      res.render('editar-face', { face: { ...face, name: (req.body.name || '').trim() }, error, success });
+
+    const name = (req.body.name || '').trim();
+    if (!name) return render('Preencha o nome.', null);
+
+    let photo = face.photo;
+    let embedding = face.embedding;
+    if (req.file) {
+      const filePath = req.file.path;
+      try {
+        const buffer = fs.readFileSync(filePath);
+        const emb = await faceService.extractEmbedding(buffer, { inputSize: 224 });
+        if (!emb) {
+          fs.unlinkSync(filePath);
+          return render('Nenhum rosto detectado na nova foto. A foto original foi mantida.', null);
+        }
+        const finalPath = path.join(FACES_DIR, face.photo);
+        fs.renameSync(filePath, finalPath);
+        embedding = JSON.stringify(emb);
+        blur.ensureBlurred(face.photo).catch(() => {});
+      } catch (e) {
+        if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+        return render('Erro ao processar a nova foto: ' + e.message, null);
+      }
+    }
+
+    db.run(
+      'UPDATE faces SET name = ?, description = ?, gender = ?, vehicle = ?, platform = ?, photo = ?, embedding = ? WHERE id = ?',
+      [name, req.body.description || null, req.body.gender || null, req.body.vehicle || null, req.body.platform || null, photo, embedding, id],
+      (err2) => {
+        if (err2) return render(err2.message, null);
+        db.get('SELECT * FROM faces WHERE id = ?', [id], (e3, updated) => {
+          if (e3 || !updated) return res.redirect('/faces/' + id + '/editar');
+          res.render('editar-face', { face: updated, error: null, success: 'Produto atualizado com sucesso.' });
+        });
+      }
+    );
+  });
+});
+
 app.get('/pagamentos', auth, (req, res) => {
   db.all('SELECT * FROM unlocks ORDER BY id DESC', (err, unlocks) => {
     if (err) return res.status(500).send(err.message);
@@ -280,7 +347,9 @@ function confirmUnlock(id, cb) {
     db.run("UPDATE unlocks SET status = 'pago', paid_at = datetime('now','localtime') WHERE id = ?", [id], (err) => {
       if (err) return cb(err);
       if (unlock.face_id) {
-        db.run('UPDATE faces SET sold = 1 WHERE id = ?', [unlock.face_id]);
+        const col = unlock.platform === 'uber' ? 'sold_uber' : unlock.platform === '99' ? 'sold_99' : null;
+        if (col) db.run(`UPDATE faces SET ${col} = 1, sold = 1 WHERE id = ?`, [unlock.face_id]);
+        else db.run('UPDATE faces SET sold = 1 WHERE id = ?', [unlock.face_id]);
       }
       cb(null, { alreadyPaid: false });
     });

@@ -35,18 +35,32 @@ db.serialize(() => {
     gender TEXT,
     vehicle TEXT,
     platform TEXT,
-    created_at TEXT DEFAULT (datetime('now','localtime'))
+    created_at TEXT DEFAULT (datetime('now','localtime')),
+    sold_uber INTEGER DEFAULT 0,
+    sold_99 INTEGER DEFAULT 0
   )`);
 
-  db.all('PRAGMA table_info(faces)', (err, cols) => {
-    if (err) return;
-    const names = cols.map((c) => c.name);
-    if (!names.includes('gender')) db.run('ALTER TABLE faces ADD COLUMN gender TEXT');
-    if (!names.includes('vehicle')) db.run('ALTER TABLE faces ADD COLUMN vehicle TEXT');
-    if (!names.includes('platform')) db.run('ALTER TABLE faces ADD COLUMN platform TEXT');
-    if (!names.includes('description')) db.run('ALTER TABLE faces ADD COLUMN description TEXT');
-    if (!names.includes('sold')) db.run('ALTER TABLE faces ADD COLUMN sold INTEGER DEFAULT 0');
-    if (!names.includes('antecedentes')) db.run('ALTER TABLE faces ADD COLUMN antecedentes INTEGER DEFAULT 0');
+  const addColumn = (table, ddl, afterCreate) => {
+    db.run(`ALTER TABLE ${table} ADD COLUMN ${ddl}`, (err) => {
+      if (!err) {
+        if (afterCreate) afterCreate();
+      } else if (!/duplicate column/i.test(err.message)) {
+        console.error(`[db] Erro ao migrar ${table}:`, err.message);
+      }
+    });
+  };
+
+  addColumn('faces', 'gender TEXT');
+  addColumn('faces', 'vehicle TEXT');
+  addColumn('faces', 'platform TEXT');
+  addColumn('faces', 'description TEXT');
+  addColumn('faces', 'sold INTEGER DEFAULT 0');
+  addColumn('faces', 'antecedentes INTEGER DEFAULT 0');
+  addColumn('faces', 'sold_uber INTEGER DEFAULT 0', () => {
+    db.run('UPDATE faces SET sold_uber = COALESCE(sold, 0)');
+  });
+  addColumn('faces', 'sold_99 INTEGER DEFAULT 0', () => {
+    db.run('UPDATE faces SET sold_99 = COALESCE(sold, 0)');
   });
 
   db.run(`CREATE TABLE IF NOT EXISTS unlocks (
@@ -56,16 +70,14 @@ db.serialize(() => {
     amount REAL NOT NULL,
     pix_code TEXT,
     asaas_id TEXT,
+    platform TEXT,
     status TEXT DEFAULT 'pendente',
     notified INTEGER DEFAULT 0,
     created_at TEXT DEFAULT (datetime('now','localtime')),
     paid_at TEXT
   )`);
-  db.all('PRAGMA table_info(unlocks)', (err, cols) => {
-    if (err) return;
-    const names = cols.map((c) => c.name);
-    if (!names.includes('asaas_id')) db.run('ALTER TABLE unlocks ADD COLUMN asaas_id TEXT');
-  });
+  addColumn('unlocks', 'asaas_id TEXT');
+  addColumn('unlocks', 'platform TEXT');
 
   db.run(`CREATE TABLE IF NOT EXISTS refills (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

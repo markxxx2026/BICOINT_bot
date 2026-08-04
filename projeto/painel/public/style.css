@@ -154,6 +154,29 @@ th { color: #94a3b8; font-weight: 600; }
 
 .badge.warn { background: #7c2d12; border-color: #9a3412; color: #fed7aa; }
 
+.badge.blue { background: #172554; border-color: #1d4ed8; color: #bfdbfe; }
+
+.badge.vendido { background: #14532d; border-color: #22c55e; color: #bbf7d0; }
+
+.tag.ok { background: #14532d; border-color: #166534; color: #bbf7d0; }
+.tag.warn { background: #7c2d12; border-color: #9a3412; color: #fed7aa; }
+
+.hint { color: #64748b; font-size: 0.8rem; }
+
+.face-preview {
+  width: 100%;
+  max-height: 320px;
+  object-fit: cover;
+  border-radius: 10px;
+  border: 1px solid #334155;
+  background: #0f172a;
+}
+
+a.btn { display: inline-block; text-align: center; text-decoration: none; }
+a.btn.primary { color: #0f172a; }
+a.btn.danger { color: #fff; }
+a.btn.warn { color: #fff; }
+
 .empty { text-align: center; color: #64748b; padding: 24px; }
 
 .two-col {

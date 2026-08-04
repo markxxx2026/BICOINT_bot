@@ -77,6 +77,10 @@
                 <% if (f.vehicle) { %><span class="tag"><%= f.vehicle %></span><% } %>
                 <% if (f.platform) { %><span class="tag"><%= f.platform %></span><% } %>
               </span>
+              <span class="tags">
+                <span class="tag <%= (f.platform === 'uber' || f.platform === 'uberx99') && !f.sold_uber ? 'ok' : 'warn' %>">UBER: <%= (f.platform === 'uber' || f.platform === 'uberx99') ? (f.sold_uber ? 'vendido' : 'ativo') : '—' %></span>
+                <span class="tag <%= (f.platform === '99' || f.platform === 'uberx99') && !f.sold_99 ? 'ok' : 'warn' %>">99: <%= (f.platform === '99' || f.platform === 'uberx99') ? (f.sold_99 ? 'vendido' : 'ativo') : '—' %></span>
+              </span>
             </div>
             <form method="POST" action="/faces/<%= f.id %>/delete" onsubmit="return confirm('Excluir face <%= f.id %>?')">
               <button type="submit" class="btn danger small">Excluir</button>
@@ -84,6 +88,7 @@
             <form method="POST" action="/faces/<%= f.id %>/antecedentes" onsubmit="return confirm('Marcar face <%= f.id %> como COM ANTECEDENTES e excluir da loja?')">
               <button type="submit" class="btn warn small">⚠️ Com antecedentes</button>
             </form>
+            <a class="btn primary small" href="/faces/<%= f.id %>/editar">✏️ Editar</a>
           </div>
           <% }) %>
         </div>

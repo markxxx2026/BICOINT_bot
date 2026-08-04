@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Editar Face #<%= face.id %> | Painel</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">Painel</div>
+  <nav>
+    <a href="/dashboard">Dashboard</a>
+    <a href="/cadastrar">Cadastrar Admin</a>
+    <a href="/cadastrar-face">Cadastrar Face</a>
+    <a href="/pagamentos">Pagamentos</a>
+    <a href="/logout">Sair</a>
+  </nav>
+</header>
+<main>
+  <div class="two-col">
+    <section class="panel">
+      <h2>Editar produto #<%= face.id %></h2>
+      <% if (error) { %>
+        <div class="alert error"><%= error %></div>
+      <% } %>
+      <% if (success) { %>
+        <div class="alert success"><%= success %></div>
+      <% } %>
+      <form method="POST" action="/faces/<%= face.id %>/editar" enctype="multipart/form-data">
+        <label for="name">Nome</label>
+        <input type="text" id="name" name="name" value="<%= face.name %>" required>
+        <label for="description">Descrição</label>
+        <textarea id="description" name="description" rows="6" placeholder="Cole aqui as informações do produto..."><%= face.description || '' %></textarea>
+        <label for="gender">Categoria</label>
+        <select id="gender" name="gender">
+          <option value="">— Sem categoria —</option>
+          <option value="homem" <%= face.gender === 'homem' ? 'selected' : '' %>>👨 Homem</option>
+          <option value="mulher" <%= face.gender === 'mulher' ? 'selected' : '' %>>👩 Mulher</option>
+        </select>
+        <label for="vehicle">Veículo</label>
+        <select id="vehicle" name="vehicle">
+          <option value="">— Nenhum —</option>
+          <option value="carro" <%= face.vehicle === 'carro' ? 'selected' : '' %>>🚗 Carro</option>
+          <option value="moto" <%= face.vehicle === 'moto' ? 'selected' : '' %>>🏍 Moto/Carro</option>
+        </select>
+        <label for="platform">Plataforma</label>
+        <select id="platform" name="platform">
+          <option value="">— Nenhuma —</option>
+          <option value="uber" <%= face.platform === 'uber' ? 'selected' : '' %>>UBER</option>
+          <option value="uberx99" <%= face.platform === 'uberx99' ? 'selected' : '' %>>Uber X / 99</option>
+          <option value="99" <%= face.platform === '99' ? 'selected' : '' %>>99</option>
+        </select>
+        <label for="foto">Nova foto do rosto (opcional)</label>
+        <input type="file" id="foto" name="foto" accept="image/*">
+        <p class="hint">Deixe vazio para manter a foto atual e a busca por similaridade.</p>
+        <button type="submit" class="btn primary">💾 Salvar alterações</button>
+        <a class="btn" href="/cadastrar-face">Voltar</a>
+      </form>
+    </section>
+
+    <section class="panel">
+      <h2>Foto atual</h2>
+      <img class="face-preview" src="/faces/<%= face.photo %>" alt="<%= face.name %>">
+      <p>
+        <span class="tag <%= (face.platform === 'uber' || face.platform === 'uberx99') && !face.sold_uber ? 'ok' : 'warn' %>">UBER: <%= (face.platform === 'uber' || face.platform === 'uberx99') ? (face.sold_uber ? 'vendido' : 'ativo') : '—' %></span>
+        <span class="tag <%= (face.platform === '99' || face.platform === 'uberx99') && !face.sold_99 ? 'ok' : 'warn' %>">99: <%= (face.platform === '99' || face.platform === 'uberx99') ? (face.sold_99 ? 'vendido' : 'ativo') : '—' %></span>
+      </p>
+      <p class="hint">Cadastrado em <%= face.created_at %></p>
+    </section>
+  </div>
+</main>
+</body>
+</html>
