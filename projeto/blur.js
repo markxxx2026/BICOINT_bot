@@ -1,8 +1,10 @@
-const path = require('path');
-const fs = require('fs');
 const { Jimp } = require('jimp');
+const storage = require('./storage');
 
-const BLURRED_DIR = path.join(__dirname, 'painel', 'blurred');
+function blurredKeyFor(photo) {
+  const stem = String(photo).replace(/\.[^.]+$/, '');
+  return 'photos/blurred/' + stem + '.jpg';
+}
 
 async function blurBuffer(buffer) {
   const img = await Jimp.read(buffer);
@@ -13,24 +15,26 @@ async function blurBuffer(buffer) {
   return await img.getBuffer('image/jpeg');
 }
 
-function blurredPathFor(photo) {
-  return path.join(BLURRED_DIR, photo.replace(/\.[^.]+$/, '') + '.jpg');
+// Retorna o Buffer borrado (do armazenamento). Se não existir, gera a partir
+// da original, grava no armazenamento e devolve o Buffer — nunca perde nada.
+async function getBlurredBuffer(photo) {
+  const key = blurredKeyFor(photo);
+  const cached = await storage.get(key);
+  if (cached) return cached;
+  const original = await storage.get('photos/' + photo);
+  if (!original) return null;
+  const out = await blurBuffer(original);
+  await storage.put(key, out);
+  return out;
 }
 
-async function ensureBlurred(photo) {
-  fs.mkdirSync(BLURRED_DIR, { recursive: true });
-  const dest = blurredPathFor(photo);
-  if (fs.existsSync(dest)) return dest;
-  const src = path.join(__dirname, 'painel', 'faces', photo);
-  if (!fs.existsSync(src)) return null;
-  const out = await blurBuffer(fs.readFileSync(src));
-  fs.writeFileSync(dest, out);
-  return dest;
+// Garante que a versão borrada existe no armazenamento (usado no cadastro).
+async function cacheBlurred(photo) {
+  return getBlurredBuffer(photo);
 }
 
-function deleteBlurred(photo) {
-  const dest = blurredPathFor(photo);
-  if (fs.existsSync(dest)) fs.unlinkSync(dest);
+async function deleteBlurred(photo) {
+  await storage.remove(blurredKeyFor(photo));
 }
 
-module.exports = { blurBuffer, ensureBlurred, deleteBlurred, blurredPathFor };
+module.exports = { blurBuffer, getBlurredBuffer, cacheBlurred, deleteBlurred, blurredKeyFor };

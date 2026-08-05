@@ -8,6 +8,7 @@ const db = require('../database/db');
 const faceService = require('../face-service');
 const blur = require('../blur');
 const referrals = require('../referrals');
+const storage = require('../storage');
 
 const app = express();
 const PORT = process.env.PANEL_PORT || 3000;
@@ -32,8 +33,22 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.json({ limit: '15mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
-app.use('/faces', express.static(FACES_DIR));
-app.use('/blurred', express.static(path.join(__dirname, 'blurred')));
+
+// Fotos servidas do armazenamento persistente (R2/S3 com cache local).
+async function serveStored(req, res, keyPrefix) {
+  const file = path.basename(req.params.file || '');
+  if (!file || file === '.' || file === '..') return res.status(400).send('Nome inválido.');
+  const buf = await storage.get(keyPrefix + file);
+  if (!buf) return res.status(404).send('Arquivo não encontrado.');
+  res.setHeader('Cache-Control', 'public, max-age=86400');
+  if (/\.(png)$/i.test(file)) res.type('png');
+  else if (/\.(webp)$/i.test(file)) res.type('webp');
+  else res.type('jpeg');
+  res.send(buf);
+}
+
+app.get('/faces/:file', (req, res) => serveStored(req, res, 'photos/'));
+app.get('/blurred/:file', (req, res) => serveStored(req, res, 'photos/blurred/'));
 
 function hashPassword(password) {
   const salt = crypto.randomBytes(16).toString('hex');
@@ -221,19 +236,27 @@ app.post('/cadastrar-face', auth, faceUpload.single('foto'), async (req, res) =>
       if (err) return render(err.message, null);
       const nextId = row.maxId + 1;
       const finalName = `${nextId}.jpg`;
-      const finalPath = path.join(FACES_DIR, finalName);
-      fs.renameSync(filePath, finalPath);
 
-      blur.ensureBlurred(finalName).catch(() => {});
-
-      db.run(
-        'INSERT INTO faces (id, name, photo, embedding, gender, vehicle, platform, description) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-        [nextId, req.body.name.trim(), finalName, JSON.stringify(embedding), req.body.gender || null, req.body.vehicle || null, req.body.platform || null, req.body.description || null],
-        (err) => {
-          if (err) return render(err.message, null);
-          render(null, `Face cadastrada com ID ${nextId}.`);
-        }
-      );
+      // Envia a foto para o armazenamento persistente (R2/S3) + cache local.
+      storage.put('photos/' + finalName, buffer)
+        .then(() => {
+          blur.cacheBlurred(finalName).catch(() => {});
+        })
+        .then(() => {
+          try { fs.unlinkSync(filePath); } catch (e) { /* já removido */ }
+          db.run(
+            'INSERT INTO faces (id, name, photo, embedding, gender, vehicle, platform, description) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+            [nextId, req.body.name.trim(), finalName, JSON.stringify(embedding), req.body.gender || null, req.body.vehicle || null, req.body.platform || null, req.body.description || null],
+            (err2) => {
+              if (err2) return render(err2.message, null);
+              render(null, `Face cadastrada com ID ${nextId}.`);
+            }
+          );
+        })
+        .catch((err3) => {
+          try { fs.unlinkSync(filePath); } catch (e) { /* já removido */ }
+          render('Erro ao salvar a foto no armazenamento: ' + err3.message, null);
+        });
     });
   } catch (err) {
     fs.unlinkSync(filePath);
@@ -243,14 +266,13 @@ app.post('/cadastrar-face', auth, faceUpload.single('foto'), async (req, res) =>
 
 app.post('/faces/:id/delete', auth, (req, res) => {
   const id = Number(req.params.id);
-  db.get('SELECT * FROM faces WHERE id = ?', [id], (err, face) => {
+  db.get('SELECT * FROM faces WHERE id = ?', [id], async (err, face) => {
     if (err) return res.status(500).send(err.message);
     if (!face) return res.status(404).send('Face não encontrada.');
-    const filePath = path.join(FACES_DIR, face.photo);
-    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
-    blur.deleteBlurred(face.photo);
-    db.run('DELETE FROM faces WHERE id = ?', [id], (err) => {
-      if (err) return res.status(500).send(err.message);
+    await storage.remove('photos/' + face.photo);
+    await blur.deleteBlurred(face.photo);
+    db.run('DELETE FROM faces WHERE id = ?', [id], (err2) => {
+      if (err2) return res.status(500).send(err2.message);
       res.redirect('/cadastrar-face');
     });
   });
@@ -295,10 +317,11 @@ app.post('/faces/:id/editar', auth, faceUpload.single('foto'), (req, res) => {
           fs.unlinkSync(filePath);
           return render('Nenhum rosto detectado na nova foto. A foto original foi mantida.', null);
         }
-        const finalPath = path.join(FACES_DIR, face.photo);
-        fs.renameSync(filePath, finalPath);
+        // Substitui a foto no armazenamento persistente (R2/S3) + cache local.
+        await storage.put('photos/' + face.photo, buffer);
+        blur.cacheBlurred(face.photo).catch(() => {});
+        try { fs.unlinkSync(filePath); } catch (e2) { /* já removido */ }
         embedding = JSON.stringify(emb);
-        blur.ensureBlurred(face.photo).catch(() => {});
       } catch (e) {
         if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
         return render('Erro ao processar a nova foto: ' + e.message, null);
@@ -415,6 +438,8 @@ app.post('/api/asaas/webhook', (req, res) => {
 });
 
 seedAdmin();
+
+storage.init().catch((e) => console.error('Erro ao iniciar storage:', e.message));
 
 faceService.warmup()
   .then(() => console.log('Modelos de reconhecimento pré-carregados (painel).'))

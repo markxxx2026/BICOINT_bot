@@ -9,6 +9,9 @@ const asaas = require('../asaas');
 const { renderPixQr } = require('../pix');
 const referrals = require('../referrals');
 const { morphFaces } = require('../mescla');
+const storage = require('../storage');
+
+storage.init().catch((e) => console.error('Erro ao iniciar storage:', e.message));
 
 const token = process.env.TELEGRAM_BOT_TOKEN;
 const PRICE = Number(process.env.PRICE_FULL_PHOTO || 10);
@@ -56,14 +59,13 @@ db.get(
 
 faceService.warmup()
   .then(async () => {
-    const photosDir = path.join(__dirname, '..', 'painel', 'faces');
     const candidates = ['1003.jpg', '1004.jpg', '1005.jpg'];
     for (const c of candidates) {
-      const fp = path.join(photosDir, c);
-      if (!fs.existsSync(fp)) continue;
       try {
+        const buf = await storage.get('photos/' + c);
+        if (!buf) continue;
         const t0 = Date.now();
-        const emb = await faceService.extractEmbedding(fs.readFileSync(fp));
+        const emb = await faceService.extractEmbedding(buf);
         console.log(`[SELFTEST] ${c} -> rosto ${emb ? 'OK (128)' : 'NULL'} em ${Date.now() - t0}ms`);
       } catch (e) {
         console.error(`[SELFTEST] ${c} -> ERRO: ${e.message}`);
@@ -431,9 +433,9 @@ async function runSearch(chatId) {
     const chosenPlatform = f.platform && (f.platform === 'uber' || f.platform === '99') ? f.platform : null;
 
     bot.sendChatAction(chatId, 'upload_photo').catch(() => {});
-    const blurredPath = await blur.ensureBlurred(match.face.photo);
-    if (blurredPath) {
-      await bot.sendPhoto(chatId, blurredPath, {
+    const blurredBuffer = await blur.getBlurredBuffer(match.face.photo);
+    if (blurredBuffer) {
+      await bot.sendPhoto(chatId, blurredBuffer, {
         caption,
         reply_markup: {
           inline_keyboard: [[
@@ -805,9 +807,9 @@ bot.on('callback_query', async (query) => {
           chatId,
           '🎁 Compra liberada com seus créditos! Enviando a foto completa...'
         ).catch(() => {});
-        const photoPath = path.join(__dirname, '..', 'painel', 'faces', face.photo);
-        if (fs.existsSync(photoPath)) {
-          await bot.sendPhoto(chatId, photoPath, {
+        const photoBuffer = await storage.get('photos/' + face.photo);
+        if (photoBuffer) {
+          await bot.sendPhoto(chatId, photoBuffer, {
             caption:
               unlockCaption(face) +
               `\n\n💰 Saldo restante: R$ ${novoSaldo.toFixed(2).replace('.', ',')}`
@@ -854,9 +856,9 @@ async function deliverPaidUnlocks() {
         try {
           db.get('SELECT * FROM faces WHERE id = ?', [u.face_id], async (e, face) => {
             if (e || !face) return;
-            const photoPath = path.join(__dirname, '..', 'painel', 'faces', face.photo);
-            if (fs.existsSync(photoPath)) {
-              await bot.sendPhoto(u.chat_id, photoPath, {
+            const photoBuffer = await storage.get('photos/' + face.photo);
+            if (photoBuffer) {
+              await bot.sendPhoto(u.chat_id, photoBuffer, {
                 caption: unlockCaption(face)
               });
             } else {

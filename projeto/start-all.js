@@ -2,6 +2,7 @@ const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 const fs = require('fs');
 const { spawn } = require('child_process');
+const storage = require('./storage');
 
 const LOG_DIR = path.join(__dirname, 'logs');
 fs.mkdirSync(LOG_DIR, { recursive: true });
@@ -40,7 +41,13 @@ function start(service) {
   log(service.name, `Iniciado (pid=${child.pid}).`);
 }
 
-services.forEach(start);
+// Persistência: restaura banco/fotos do R2/S3 antes dos processos abrirem o painel.db.
+storage.boot().then(() => {
+  services.forEach(start);
+}).catch((err) => {
+  console.error('Falha no boot de armazenamento:', err.message);
+  services.forEach(start);
+});
 
 process.on('SIGINT', () => {
   console.log('Encerrando todos os serviços...');
