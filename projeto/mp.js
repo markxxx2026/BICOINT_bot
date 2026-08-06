@@ -6,19 +6,21 @@ const TOKEN = process.env.MP_ACCESS_TOKEN;
 
 const qrCache = new Map();
 
-function request(method, path, body) {
+function request(method, path, body, extraHeaders) {
   return new Promise((resolve, reject) => {
     const url = new URL(BASE_URL + path);
     const data = body === undefined ? null : JSON.stringify(body);
+    const headers = {
+      Authorization: `Bearer ${TOKEN}`,
+      'Content-Type': 'application/json',
+      'User-Agent': 'BicoBot/1.0'
+    };
+    if (extraHeaders) Object.assign(headers, extraHeaders);
     const req = https.request(
       url,
       {
         method,
-        headers: {
-          Authorization: `Bearer ${TOKEN}`,
-          'Content-Type': 'application/json',
-          'User-Agent': 'BicoBot/1.0'
-        },
+        headers,
         timeout: 20000
       },
       (res) => {
@@ -91,7 +93,7 @@ async function createPixPayment({ chatId, value, externalReference, description 
   if (process.env.MP_NOTIFICATION_URL) {
     body.notification_url = process.env.MP_NOTIFICATION_URL;
   }
-  const payment = await request('POST', '/v1/payments', body);
+  const payment = await request('POST', '/v1/payments', body, { 'X-Idempotency-Key': String(externalReference || `PIX_${Date.now()}`) });
   const td = transactionDataFrom(payment);
   if (td && td.qr_code) qrCache.set(String(payment.id), td);
   return payment;
