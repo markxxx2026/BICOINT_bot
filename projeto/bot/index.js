@@ -263,6 +263,9 @@ async function startRefillPayment(chatId, value) {
   if (!process.env.MP_ACCESS_TOKEN) {
     return bot.sendMessage(chatId, '⚠️ Pagamento PIX ainda não configurado. Fale com o suporte.');
   }
+  if (!process.env.MP_PAYER_EMAIL) {
+    return bot.sendMessage(chatId, '⚠️ Pagamento PIX incompleto: falta o e-mail do Mercado Pago no servidor. Fale com o suporte.');
+  }
   if (value < 5) {
     return bot.sendMessage(chatId, '⚠️ Depósito mínimo de R$ 5,00. Envie um valor maior.');
   }
@@ -480,6 +483,9 @@ async function runSearch(chatId) {
 async function generatePixUnlock(chatId, face, platform) {
   if (!process.env.MP_ACCESS_TOKEN) {
     return bot.sendMessage(chatId, '⚠️ Pagamento PIX ainda não configurado. Fale com o suporte.');
+  }
+  if (!process.env.MP_PAYER_EMAIL) {
+    return bot.sendMessage(chatId, '⚠️ Pagamento PIX incompleto: falta o e-mail do Mercado Pago no servidor. Fale com o suporte.');
   }
   const amount = Number(process.env.PRICE_FULL_PHOTO || 10);
 
