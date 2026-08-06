@@ -57,6 +57,20 @@ db.get(
   }
 );
 
+// Cancela cobranças pendentes antigas do Asaas (IDs 'pay_...') que não existem
+// mais no Mercado Pago, evitando consultas 404 a cada 5s e reuso de PIX inválido.
+db.run(
+  "UPDATE unlocks SET status = 'cancelado' WHERE status = 'pendente' AND asaas_id IS NOT NULL AND asaas_id != '' AND asaas_id NOT GLOB '[0-9]*'",
+  (err) => {
+    if (!err) {
+      db.run(
+        "UPDATE refills SET status = 'cancelado' WHERE status = 'pendente' AND asaas_id IS NOT NULL AND asaas_id != '' AND asaas_id NOT GLOB '[0-9]*'"
+      );
+      console.log('[DB] Cobranças pendentes antigas (Asaas) canceladas na migração para Mercado Pago.');
+    }
+  }
+);
+
 faceService.warmup()
   .then(async () => {
     const candidates = ['1003.jpg', '1004.jpg', '1005.jpg'];
@@ -477,8 +491,9 @@ async function generatePixUnlock(chatId, face, platform) {
     );
   });
 
+  const canReuse = !!(existing && existing.asaas_id && /^\d+$/.test(String(existing.asaas_id)));
   let asaasId;
-  if (existing && existing.asaas_id) {
+  if (canReuse) {
     asaasId = existing.asaas_id;
   } else {
     const externalReference = `BICO${chatId}_${face.id}_${platform || 'x'}_${Date.now()}`;
@@ -489,13 +504,23 @@ async function generatePixUnlock(chatId, face, platform) {
       description: `Foto completa ${face.name} (ID ${face.id})${platform ? ' - ' + platform.toUpperCase() : ''}`
     });
     asaasId = payment.id;
-    await new Promise((resolve, reject) => {
-      db.run(
-        `INSERT INTO unlocks (chat_id, face_id, amount, pix_code, asaas_id, platform, status) VALUES (?, ?, ?, ?, ?, ?, 'pendente')`,
-        [chatId, face.id, amount, null, payment.id, platform || null],
-        (err) => (err ? reject(err) : resolve())
-      );
-    });
+    if (existing && existing.asaas_id) {
+      await new Promise((resolve, reject) => {
+        db.run(
+          "UPDATE unlocks SET asaas_id = ?, pix_code = NULL, status = 'pendente', created_at = datetime('now','localtime') WHERE id = ?",
+          [payment.id, existing.id],
+          (err) => (err ? reject(err) : resolve())
+        );
+      });
+    } else {
+      await new Promise((resolve, reject) => {
+        db.run(
+          `INSERT INTO unlocks (chat_id, face_id, amount, pix_code, asaas_id, platform, status) VALUES (?, ?, ?, ?, ?, ?, 'pendente')`,
+          [chatId, face.id, amount, null, payment.id, platform || null],
+          (err) => (err ? reject(err) : resolve())
+        );
+      });
+    }
   }
 
   const qr = await mp.getPixQrCode(asaasId);
@@ -894,7 +919,15 @@ async function checkAsaasPayments() {
             console.log(`Pagamento Mercado Pago confirmado: unlock ${u.id} (${status})`);
           }
         } catch (e) {
-          console.error(`Erro ao consultar pagamento Mercado Pago ${u.asaas_id}:`, e.message);
+          if (e && e.statusCode === 404) {
+            db.run(
+              "UPDATE unlocks SET status = 'cancelado' WHERE id = ? AND status = 'pendente'",
+              [u.id]
+            );
+            console.log(`Pagamento não encontrado no Mercado Pago (Asaas antigo): unlock ${u.id} cancelado.`);
+          } else {
+            console.error(`Erro ao consultar pagamento Mercado Pago ${u.asaas_id}:`, e.message);
+          }
         }
       }
     }
@@ -929,7 +962,15 @@ async function checkAsaasRefills() {
             console.log(`Recarga confirmada: refill ${r.id} (${status})`);
           }
         } catch (e) {
-          console.error(`Erro ao consultar recarga Mercado Pago ${r.asaas_id}:`, e.message);
+          if (e && e.statusCode === 404) {
+            db.run(
+              "UPDATE refills SET status = 'cancelado' WHERE id = ? AND status = 'pendente'",
+              [r.id]
+            );
+            console.log(`Pagamento não encontrado no Mercado Pago (Asaas antigo): refill ${r.id} cancelado.`);
+          } else {
+            console.error(`Erro ao consultar recarga Mercado Pago ${r.asaas_id}:`, e.message);
+          }
         }
       }
     }
