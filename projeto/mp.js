@@ -117,3 +117,9 @@ async function getPaymentStatus(paymentId) {
 }
 
 module.exports = { createPixPayment, getPixQrCode, getPaymentStatus, normalizeStatus, request };
+
+if (TOKEN) {
+  console.log(`[mp] Mercado Pago PIX ativo (token=SIM, email=${process.env.MP_PAYER_EMAIL ? 'SIM' : 'NÃO'}).`);
+} else {
+  console.log('[mp] ATENCAO: MP_ACCESS_TOKEN ausente — pagamento PIX desativado.');
+}
