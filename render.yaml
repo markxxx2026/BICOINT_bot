@@ -14,9 +14,11 @@ services:
         sync: false
       - key: TELEGRAM_WEBHOOK_URL
         sync: false
-      - key: ASAAS_API_KEY
+      - key: MP_ACCESS_TOKEN
         sync: false
-      - key: ASAAS_CUSTOMER_CPF
+      - key: MP_PAYER_EMAIL
+        sync: false
+      - key: MP_NOTIFICATION_URL
         sync: false
       - key: PIX_KEY
         sync: false

@@ -5,7 +5,7 @@ const TelegramBot = require('node-telegram-bot-api');
 const db = require('../database/db');
 const faceService = require('../face-service');
 const blur = require('../blur');
-const asaas = require('../asaas');
+const mp = require('../mp');
 const { renderPixQr } = require('../pix');
 const referrals = require('../referrals');
 const { morphFaces } = require('../mescla');
@@ -246,7 +246,7 @@ function showBalance(chatId) {
 }
 
 async function startRefillPayment(chatId, value) {
-  if (!process.env.ASAAS_API_KEY) {
+  if (!process.env.MP_ACCESS_TOKEN) {
     return bot.sendMessage(chatId, '⚠️ Pagamento PIX ainda não configurado. Fale com o suporte.');
   }
   if (value < 5) {
@@ -255,13 +255,13 @@ async function startRefillPayment(chatId, value) {
   bot.sendMessage(chatId, '🔄 Gerando QR Code PIX...').catch(() => {});
   try {
     const externalReference = `REFILL${chatId}_${Date.now()}`;
-    const payment = await asaas.createPixPayment({
+    const payment = await mp.createPixPayment({
       chatId,
       value,
       externalReference,
       description: `Recarga de créditos R$ ${value.toFixed(2).replace('.', ',')}`
     });
-    const qr = await asaas.getPixQrCode(payment.id);
+    const qr = await mp.getPixQrCode(payment.id);
 
     db.run(
       "INSERT INTO refills (chat_id, amount, asaas_id, status) VALUES (?, ?, ?, 'pendente')",
@@ -464,7 +464,7 @@ async function runSearch(chatId) {
 
 // Gera (ou reutiliza) a cobrança PIX de um produto. Evita cobranças duplicadas.
 async function generatePixUnlock(chatId, face, platform) {
-  if (!process.env.ASAAS_API_KEY) {
+  if (!process.env.MP_ACCESS_TOKEN) {
     return bot.sendMessage(chatId, '⚠️ Pagamento PIX ainda não configurado. Fale com o suporte.');
   }
   const amount = Number(process.env.PRICE_FULL_PHOTO || 10);
@@ -482,7 +482,7 @@ async function generatePixUnlock(chatId, face, platform) {
     asaasId = existing.asaas_id;
   } else {
     const externalReference = `BICO${chatId}_${face.id}_${platform || 'x'}_${Date.now()}`;
-    const payment = await asaas.createPixPayment({
+    const payment = await mp.createPixPayment({
       chatId,
       value: amount,
       externalReference,
@@ -498,7 +498,7 @@ async function generatePixUnlock(chatId, face, platform) {
     });
   }
 
-  const qr = await asaas.getPixQrCode(asaasId);
+  const qr = await mp.getPixQrCode(asaasId);
   let qrBuffer;
   if (qr.encodedImage) {
     qrBuffer = Buffer.from(String(qr.encodedImage).replace(/^data:image\/\w+;base64,/, ''), 'base64');
@@ -877,24 +877,24 @@ async function deliverPaidUnlocks() {
 setInterval(deliverPaidUnlocks, 5000);
 
 async function checkAsaasPayments() {
-  if (!process.env.ASAAS_API_KEY) return;
+  if (!process.env.MP_ACCESS_TOKEN) return;
   db.all(
     "SELECT * FROM unlocks WHERE status = 'pendente' AND asaas_id IS NOT NULL AND asaas_id != ''",
     async (err, unlocks) => {
       if (err) return;
       for (const u of unlocks) {
         try {
-          const status = await asaas.getPaymentStatus(u.asaas_id);
+          const status = await mp.getPaymentStatus(u.asaas_id);
           if (status === 'RECEIVED' || status === 'CONFIRMED') {
             db.run(
               "UPDATE unlocks SET status = 'pago', paid_at = datetime('now','localtime') WHERE id = ? AND status = 'pendente'",
               [u.id]
             );
             markSold(u.face_id, u.platform);
-            console.log(`Pagamento Asaas confirmado: unlock ${u.id} (${status})`);
+            console.log(`Pagamento Mercado Pago confirmado: unlock ${u.id} (${status})`);
           }
         } catch (e) {
-          console.error(`Erro ao consultar pagamento Asaas ${u.asaas_id}:`, e.message);
+          console.error(`Erro ao consultar pagamento Mercado Pago ${u.asaas_id}:`, e.message);
         }
       }
     }
@@ -904,14 +904,14 @@ async function checkAsaasPayments() {
 setInterval(checkAsaasPayments, 5000);
 
 async function checkAsaasRefills() {
-  if (!process.env.ASAAS_API_KEY) return;
+  if (!process.env.MP_ACCESS_TOKEN) return;
   db.all(
     "SELECT * FROM refills WHERE status = 'pendente' AND asaas_id IS NOT NULL AND asaas_id != ''",
     async (err, refills) => {
       if (err) return;
       for (const r of refills) {
         try {
-          const status = await asaas.getPaymentStatus(r.asaas_id);
+          const status = await mp.getPaymentStatus(r.asaas_id);
           if (status === 'RECEIVED' || status === 'CONFIRMED') {
             db.run(
               "UPDATE refills SET status = 'pago', paid_at = datetime('now','localtime') WHERE id = ? AND status = 'pendente'",
@@ -929,7 +929,7 @@ async function checkAsaasRefills() {
             console.log(`Recarga confirmada: refill ${r.id} (${status})`);
           }
         } catch (e) {
-          console.error(`Erro ao consultar recarga Asaas ${r.asaas_id}:`, e.message);
+          console.error(`Erro ao consultar recarga Mercado Pago ${r.asaas_id}:`, e.message);
         }
       }
     }
