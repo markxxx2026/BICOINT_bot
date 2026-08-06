@@ -96,7 +96,12 @@ async function init() {
   const cfg = detectConfig();
   if (!cfg) {
     usingRemote = false;
-    console.log('[storage] Modo local (R2/S3 não configurado). Fotos gravadas apenas no disco.');
+    const r2vars = ['R2_ACCOUNT_ID', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY', 'R2_BUCKET'];
+    console.log('[storage] Modo local (R2/S3 não configurado).');
+    console.log('[storage] Diagnóstico R2: ' + r2vars.map((v) => `${v}=${process.env[v] ? 'SIM' : 'NÃO'}`).join(' | '));
+    if (!process.env.R2_ACCOUNT_ID && !process.env.R2_BUCKET) {
+      console.log('[storage] Nenhuma variável R2_* encontrada. Confirme que estão no Environment do serviço CERTO na Render e clique em Deploy após salvar.');
+    }
     return;
   }
   try {
