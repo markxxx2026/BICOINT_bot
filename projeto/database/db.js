@@ -62,6 +62,9 @@ db.serialize(() => {
   addColumn('faces', 'sold_99 INTEGER DEFAULT 0', () => {
     db.run('UPDATE faces SET sold_99 = COALESCE(sold, 0)');
   });
+  addColumn('faces', 'category TEXT');
+  addColumn('faces', 'photo_hash TEXT');
+  addColumn('faces', 'price REAL');
 
   db.run(`CREATE TABLE IF NOT EXISTS unlocks (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -11,6 +11,7 @@
   <div class="brand">Painel</div>
   <nav>
     <a href="/dashboard">Dashboard</a>
+    <a href="/importar">Importar</a>
     <a href="/cadastrar">Cadastrar Admin</a>
     <a href="/cadastrar-face">Cadastrar Face</a>
     <a href="/pagamentos">Pagamentos</a>
@@ -73,6 +74,8 @@
                 <span class="desc"><%= f.description %></span>
               <% } %>
               <span class="tags">
+                <% if (f.category) { %><span class="tag">📁 <%= f.category %></span><% } %>
+                <% if (f.price) { %><span class="tag">R$ <%= Number(f.price).toFixed(2).replace('.', ',') %></span><% } %>
                 <% if (f.gender) { %><span class="tag"><%= f.gender %></span><% } %>
                 <% if (f.vehicle) { %><span class="tag"><%= f.vehicle %></span><% } %>
                 <% if (f.platform) { %><span class="tag"><%= f.platform %></span><% } %>

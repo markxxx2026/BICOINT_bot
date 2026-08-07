@@ -9,6 +9,7 @@ const faceService = require('../face-service');
 const blur = require('../blur');
 const referrals = require('../referrals');
 const storage = require('../storage');
+const importer = require('../importer');
 
 const app = express();
 const PORT = process.env.PANEL_PORT || 3000;
@@ -32,7 +33,9 @@ app.set('views', path.join(__dirname, 'views'));
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json({ limit: '15mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+// (O diretório uploads é a pasta do importador automático e NÃO fica exposto
+// publicamente — fotos originais aguardando importação não devem ser acessíveis.)
 
 // Fotos servidas do armazenamento persistente (R2/S3 com cache local).
 async function serveStored(req, res, keyPrefix) {
@@ -85,6 +88,10 @@ function auth(req, res, next) {
 
 const upload = multer({ dest: path.join(__dirname, 'uploads') });
 const faceUpload = multer({ dest: FACES_DIR });
+const importUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 15 * 1024 * 1024 }
+});
 
 app.get('/', (req, res) => res.redirect('/login'));
 
@@ -198,6 +205,59 @@ app.post('/cadastrar', auth, (req, res) => {
 app.post('/upload', auth, upload.single('file'), (req, res) => {
   if (!req.file) return res.status(400).json({ ok: false, error: 'Nenhum arquivo enviado.' });
   res.json({ ok: true, filename: req.file.filename });
+});
+
+// Sanitiza o caminho relativo recebido do cliente (mantém pastas p/ categoria,
+// bloqueia "..", só aceita imagens).
+function sanitizeRelPath(rel) {
+  const parts = String(rel || '')
+    .replace(/\\/g, '/')
+    .split('/')
+    .filter((p) => p && p !== '.' && p !== '..');
+  if (!parts.length) return null;
+  const filename = parts[parts.length - 1];
+  if (!importer.IMAGE_RE.test(filename)) return null;
+  return parts.join(path.sep);
+}
+
+app.get('/importar', auth, (req, res) => {
+  res.render('importer', { status: importer.getStatus(), error: null, success: null });
+});
+
+app.post('/api/importer/upload', auth, importUpload.array('files'), (req, res) => {
+  const files = req.files || [];
+  if (!files.length) return res.status(400).json({ ok: false, error: 'Nenhum arquivo enviado.' });
+
+  let relpaths = [];
+  try {
+    relpaths = JSON.parse(req.body.relpaths || '[]');
+  } catch (e) { /* segue com nomes originais */ }
+
+  const baseDir = path.join(__dirname, 'uploads');
+  const written = [];
+  const skipped = [];
+  files.forEach((f, i) => {
+    const rel = sanitizeRelPath(relpaths[i] || f.originalname);
+    if (!rel) {
+      skipped.push(f.originalname);
+      return;
+    }
+    try {
+      const target = path.join(baseDir, rel);
+      fs.mkdirSync(path.dirname(target), { recursive: true });
+      fs.writeFileSync(target, f.buffer);
+      written.push(rel);
+    } catch (e) {
+      skipped.push(f.originalname);
+    }
+  });
+
+  importer.triggerScan();
+  res.json({ ok: true, written, skipped });
+});
+
+app.get('/api/importer/status', auth, (req, res) => {
+  res.json(importer.getStatus());
 });
 
 const LIST_SQL = 'SELECT * FROM faces WHERE COALESCE(antecedentes, 0) = 0 ORDER BY id';
@@ -442,8 +502,14 @@ seedAdmin();
 storage.init().catch((e) => console.error('Erro ao iniciar storage:', e.message));
 
 faceService.warmup()
-  .then(() => console.log('Modelos de reconhecimento pré-carregados (painel).'))
-  .catch((err) => console.error('Erro ao pré-carregar modelos:', err.message));
+  .then(() => {
+    console.log('Modelos de reconhecimento pré-carregados (painel).');
+    importer.start();
+  })
+  .catch((err) => {
+    console.error('Erro ao pré-carregar modelos:', err.message);
+    importer.start();
+  });
 
 if (require.main === module) {
   app.listen(PORT, () => {

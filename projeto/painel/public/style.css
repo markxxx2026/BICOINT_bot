@@ -246,3 +246,64 @@ select {
 .btn.warn { background: #d97706; color: #fff; }
 .btn.warn:hover { background: #b45309; }
 .btn.small { padding: 7px; font-size: 0.8rem; }
+
+.dropzone {
+  border: 2px dashed #334155;
+  border-radius: 12px;
+  padding: 32px 20px;
+  margin-top: 16px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+}
+
+.dropzone strong { color: #e2e8f0; }
+
+.dropzone:hover, .dropzone.over {
+  border-color: #38bdf8;
+  background: rgba(56, 189, 248, 0.06);
+}
+
+.dropzone-actions { display: flex; gap: 10px; justify-content: center; }
+
+.code {
+  display: block;
+  background: #0f172a;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  padding: 12px;
+  margin: 12px 0;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  color: #7dd3fc;
+  overflow-x: auto;
+}
+
+.progress-wrap {
+  height: 18px;
+  background: #0f172a;
+  border: 1px solid #334155;
+  border-radius: 20px;
+  overflow: hidden;
+  margin-bottom: 12px;
+}
+
+.progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, #38bdf8, #22c55e);
+  transition: width 0.4s ease;
+  border-radius: 20px;
+}
+
+.import-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  font-size: 0.85rem;
+  color: #94a3b8;
+}
+
+.import-stats strong { color: #e2e8f0; }

@@ -27,6 +27,7 @@ projeto/painel/faces/*
 !projeto/painel/faces/*.webp
 projeto/painel/blurred/
 projeto/painel/uploads/
+projeto/painel/rejected/
 projeto/tmp/
 projeto/painel/public/uploads/
 

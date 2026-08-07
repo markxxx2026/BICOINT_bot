@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Importar Fotos | Painel</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">Painel</div>
+  <nav>
+    <a href="/dashboard">Dashboard</a>
+    <a href="/importar">Importar</a>
+    <a href="/cadastrar">Cadastrar Admin</a>
+    <a href="/cadastrar-face">Cadastrar Face</a>
+    <a href="/pagamentos">Pagamentos</a>
+    <a href="/logout">Sair</a>
+  </nav>
+</header>
+<main>
+  <section class="panel">
+    <h2>📥 Importação automática de fotos</h2>
+    <% if (error) { %>
+      <div class="alert error"><%= error %></div>
+    <% } %>
+    <% if (success) { %>
+      <div class="alert success"><%= success %></div>
+    <% } %>
+    <p class="hint">
+      Arraste fotos (ou uma pasta inteira) para a área abaixo. Cada imagem com
+      rosto é cadastrada automaticamente: embedding gerado, foto enviada ao
+      armazenamento persistente e exclusão da original após o cadastro.
+    </p>
+    <p class="hint">
+      📁 <strong>Pasta = categoria</strong>: solte em <code>uploads/Praia/</code> para
+      a categoria "Praia". Para metadados (nome, descrição, categoria, preço,
+      tags), crie um <code>.json</code> com o mesmo nome da foto (ex.:
+      <code>foto.jpg</code> + <code>foto.json</code>):
+    </p>
+    <pre class="code">{
+  "title": "Nome do produto",
+  "description": "Ficha do bico...",
+  "category": "Praia",
+  "price": 10,
+  "tags": ["solteiro", "carro"],
+  "gender": "mulher",
+  "vehicle": "carro",
+  "platform": "uber"
+}</pre>
+
+    <div class="dropzone" id="dropzone">
+      <strong>📸 Arraste as fotos aqui</strong>
+      <span class="hint">ou clique abaixo para escolher</span>
+      <div class="dropzone-actions">
+        <button type="button" class="btn primary small" id="btn-files">Selecionar arquivos</button>
+        <button type="button" class="btn primary small" id="btn-folder">Selecionar pasta</button>
+      </div>
+    </div>
+    <input type="file" id="input-files" accept="image/*" multiple hidden>
+    <input type="file" id="input-folder" webkitdirectory multiple hidden>
+
+    <div id="upload-log" class="hint" style="margin-top:10px;"></div>
+  </section>
+
+  <section class="panel">
+    <h2>📊 Status da importação</h2>
+    <div class="progress-wrap">
+      <div class="progress-bar" id="progress-bar" style="width:0%"></div>
+    </div>
+    <div class="import-stats" id="stats">
+      <span>Total: <strong id="st-total">0</strong></span>
+      <span>Na fila: <strong id="st-queued">0</strong></span>
+      <span>Processando: <strong id="st-processing">0</strong></span>
+      <span>✅ Importadas: <strong id="st-done">0</strong></span>
+      <span>⚠️ Falhas: <strong id="st-failed">0</strong></span>
+      <span>🚫 Sem rosto: <strong id="st-rejected">0</strong></span>
+      <span>♻️ Duplicadas: <strong id="st-duplicates">0</strong></span>
+    </div>
+    <p class="hint" id="status-text">Aguardando...</p>
+  </section>
+</main>
+
+<script>
+(function () {
+  var dropzone = document.getElementById('dropzone');
+  var inputFiles = document.getElementById('input-files');
+  var inputFolder = document.getElementById('input-folder');
+  var uploadLog = document.getElementById('upload-log');
+  var pollTimer = null;
+
+  function setDragOver(on) {
+    dropzone.classList.toggle('over', !!on);
+  }
+
+  ['dragenter', 'dragover'].forEach(function (ev) {
+    dropzone.addEventListener(ev, function (e) {
+      e.preventDefault();
+      setDragOver(true);
+    });
+  });
+  ['dragleave', 'drop'].forEach(function (ev) {
+    dropzone.addEventListener(ev, function (e) {
+      e.preventDefault();
+      setDragOver(false);
+    });
+  });
+  dropzone.addEventListener('drop', function (e) {
+    var files = e.dataTransfer.files;
+    if (files && files.length) uploadFiles(files);
+  });
+  dropzone.addEventListener('click', function () { inputFiles.click(); });
+
+  document.getElementById('btn-files').addEventListener('click', function (e) {
+    e.stopPropagation();
+    inputFiles.click();
+  });
+  document.getElementById('btn-folder').addEventListener('click', function (e) {
+    e.stopPropagation();
+    inputFolder.click();
+  });
+  inputFiles.addEventListener('change', function () {
+    if (inputFiles.files.length) uploadFiles(inputFiles.files);
+    inputFiles.value = '';
+  });
+  inputFolder.addEventListener('change', function () {
+    if (inputFolder.files.length) uploadFiles(inputFolder.files);
+    inputFolder.value = '';
+  });
+
+  function uploadFiles(fileList) {
+    var files = Array.prototype.slice.call(fileList);
+    var relpaths = files.map(function (f) { return f.webkitRelativePath || f.name; });
+    var fd = new FormData();
+    files.forEach(function (f) { fd.append('files', f); });
+    fd.append('relpaths', JSON.stringify(relpaths));
+
+    uploadLog.textContent = '⬆️ Enviando ' + files.length + ' arquivo(s)...';
+    fetch('/api/importer/upload', { method: 'POST', body: fd })
+      .then(function (r) { return r.json(); })
+      .then(function (res) {
+        if (res.ok) {
+          var msg = '✅ ' + res.written.length + ' arquivo(s) enviado(s). Importando...';
+          if (res.skipped && res.skipped.length) msg += ' (ignorados: ' + res.skipped.join(', ') + ')';
+          uploadLog.textContent = msg;
+        } else {
+          uploadLog.textContent = '❌ Erro no envio: ' + (res.error || 'desconhecido');
+        }
+      })
+      .catch(function () {
+        uploadLog.textContent = '❌ Falha ao enviar os arquivos.';
+      });
+  }
+
+  function render(status) {
+    var total = status.total || 0;
+    var finished = (status.done || 0) + (status.failed || 0) + (status.rejected || 0) + (status.duplicates || 0);
+    var pct = total ? Math.round((finished / total) * 100) : 0;
+    document.getElementById('progress-bar').style.width = pct + '%';
+    document.getElementById('st-total').textContent = total;
+    document.getElementById('st-queued').textContent = status.queued;
+    document.getElementById('st-processing').textContent = status.processing;
+    document.getElementById('st-done').textContent = status.done;
+    document.getElementById('st-failed').textContent = status.failed;
+    document.getElementById('st-rejected').textContent = status.rejected;
+    document.getElementById('st-duplicates').textContent = status.duplicates;
+
+    var txt = total === 0
+      ? 'Sem arquivos pendentes. Solte fotos acima para começar.'
+      : 'Importados ' + status.done + ' de ' + total + ' (fila: ' + status.queued + ', processando: ' + status.processing + ')';
+    document.getElementById('status-text').textContent = txt;
+
+    if (status.idle && total > 0) {
+      document.getElementById('status-text').textContent = '✅ Importação concluída. Confira os produtos em "Cadastrar Face".';
+    }
+  }
+
+  function poll() {
+    fetch('/api/importer/status')
+      .then(function (r) { return r.json(); })
+      .then(render)
+      .catch(function () {});
+  }
+
+  pollTimer = setInterval(poll, 1500);
+  poll();
+})();
+</script>
+</body>
+</html>
