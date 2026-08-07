@@ -368,6 +368,9 @@ app.post('/api/importer/upload', auth, importUpload.array('files'), (req, res) =
   } catch (e) { /* segue com nomes originais */ }
 
   const baseDir = path.join(__dirname, 'uploads');
+  const title = String(req.body.title || '').trim();
+  const description = String(req.body.description || '').trim();
+  const hasMeta = !!(title || description);
   const written = [];
   const skipped = [];
   files.forEach((f, i) => {
@@ -380,6 +383,15 @@ app.post('/api/importer/upload', auth, importUpload.array('files'), (req, res) =
       const target = path.join(baseDir, rel);
       fs.mkdirSync(path.dirname(target), { recursive: true });
       fs.writeFileSync(target, f.buffer);
+      if (hasMeta) {
+        const jsonTarget = path.join(path.dirname(target), path.basename(target, path.extname(target)) + '.json');
+        if (!fs.existsSync(jsonTarget)) {
+          const meta = {};
+          if (title) meta.title = title;
+          if (description) meta.description = description;
+          fs.writeFileSync(jsonTarget, JSON.stringify(meta));
+        }
+      }
       written.push(rel);
     } catch (e) {
       skipped.push(f.originalname);

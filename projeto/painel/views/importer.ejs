@@ -80,6 +80,16 @@
   "platform": "uber"
 }</pre>
 
+    <p class="hint" style="margin-top: 14px;">
+      ✏️ Ou preencha abaixo o <strong>nome</strong> e a <strong>descrição</strong>
+      para aplicar em todas as fotos desta leva (deixe em branco para usar o
+      nome do arquivo):
+    </p>
+    <label for="title">Nome do produto (opcional)</label>
+    <input type="text" id="title" name="title" placeholder="Ex.: Modelo de moto 2019">
+    <label for="description">Descrição (opcional)</label>
+    <textarea id="description" name="description" rows="4" placeholder="Ficha do produto: características, detalhes..."></textarea>
+
     <div class="dropzone" id="dropzone">
       <strong>📸 Arraste as fotos aqui</strong>
       <span class="hint">ou clique abaixo para escolher</span>
@@ -165,6 +175,8 @@
     var fd = new FormData();
     files.forEach(function (f) { fd.append('files', f); });
     fd.append('relpaths', JSON.stringify(relpaths));
+    fd.append('title', document.getElementById('title').value);
+    fd.append('description', document.getElementById('description').value);
 
     uploadLog.textContent = '⬆️ Enviando ' + files.length + ' arquivo(s)...';
     fetch('/api/importer/upload', { method: 'POST', body: fd })
