@@ -466,13 +466,7 @@ async function runSearch(chatId) {
 
     delete session[chatId];
 
-    // QR Code PIX gerado automaticamente no momento da correspondência.
-    try {
-      await generatePixUnlock(chatId, match.face, chosenPlatform);
-    } catch (err3) {
-      console.error('Erro ao gerar PIX automático:', err3.message);
-      bot.sendMessage(chatId, '⚠️ Não consegui gerar o PIX. Toque em "💰 Pagar e desbloquear" para tentar novamente.').catch(() => {});
-    }
+    // O QR Code PIX só é gerado quando o cliente toca em "💰 Pagar e desbloquear".
   } catch (err) {
     console.error('Erro na busca:', err.message);
     bot.sendMessage(chatId, 'Ocorreu um erro durante a busca. Tente novamente.');

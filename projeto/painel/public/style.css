@@ -307,3 +307,56 @@ select {
 }
 
 .import-stats strong { color: #e2e8f0; }
+
+body.dash-bg {
+  background-image: url('/bg.jpg');
+  background-size: cover;
+  background-position: center;
+  background-attachment: fixed;
+}
+
+.charts-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+@media (max-width: 860px) { .charts-row { grid-template-columns: 1fr; } }
+
+.chart-box {
+  height: 280px;
+  position: relative;
+}
+
+.platform-btns {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.pbtn {
+  border: none;
+  border-radius: 8px;
+  padding: 8px;
+  font-weight: 700;
+  font-size: 0.78rem;
+  cursor: pointer;
+  width: 100%;
+  letter-spacing: 0.3px;
+}
+
+.pbtn.avail {
+  background: #22c55e;
+  color: #052e16;
+}
+
+.pbtn.avail:hover { background: #16a34a; }
+
+.pbtn.sold {
+  background: #334155;
+  color: #94a3b8;
+}
+
+.pbtn.sold:hover { background: #475569; color: #cbd5e1; }

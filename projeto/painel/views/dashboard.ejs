@@ -6,8 +6,9 @@
 <meta http-equiv="refresh" content="5">
 <title>Dashboard | Painel</title>
 <link rel="stylesheet" href="/style.css">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
 </head>
-<body>
+<body class="dash-bg">
 <header class="topbar">
   <div class="brand">Painel</div>
   <nav>
@@ -41,6 +42,21 @@
       <h2><%= stats.pendentes %></h2>
       <p>Pagamentos Pendentes</p>
     </div>
+  </div>
+
+  <div class="charts-row">
+    <section class="panel">
+      <h2>🥧 Vendas por plataforma</h2>
+      <div class="chart-box">
+        <canvas id="pieChart"></canvas>
+      </div>
+    </section>
+    <section class="panel">
+      <h2>📊 Ganhos por dia (últimos 7 dias)</h2>
+      <div class="chart-box">
+        <canvas id="barChart"></canvas>
+      </div>
+    </section>
   </div>
 
   <section class="panel">
@@ -153,5 +169,67 @@
     </table>
   </section>
 </main>
+<script>
+(function () {
+  var pieLabels = <%- chartPie.labels %>;
+  var pieValues = <%- chartPie.values %>;
+  var barLabels = <%- chartBar.labels %>;
+  var barValues = <%- chartBar.values %>;
+
+  var dark = '#0f172a';
+  var border = '#334155';
+  var text = '#e2e8f0';
+  var muted = '#94a3b8';
+  var grid = '#1e293b';
+
+  if (window.Chart) {
+    new Chart(document.getElementById('pieChart'), {
+      type: 'pie',
+      data: {
+        labels: pieLabels,
+        datasets: [{
+          data: pieValues,
+          backgroundColor: ['#38bdf8', '#22c55e', '#f59e0b'],
+          borderColor: border,
+          borderWidth: 2
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { labels: { color: text } }
+        }
+      }
+    });
+
+    new Chart(document.getElementById('barChart'), {
+      type: 'bar',
+      data: {
+        labels: barLabels,
+        datasets: [{
+          label: 'Receita (R$)',
+          data: barValues,
+          backgroundColor: '#38bdf8',
+          borderColor: '#0ea5e9',
+          borderWidth: 1,
+          borderRadius: 4
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+          x: { ticks: { color: muted }, grid: { color: grid } },
+          y: { beginAtZero: true, ticks: { color: muted }, grid: { color: grid } }
+        },
+        plugins: {
+          legend: { labels: { color: text } }
+        }
+      }
+    });
+  }
+})();
+</script>
 </body>
 </html>

@@ -155,6 +155,35 @@ app.get('/dashboard', auth, async (req, res) => {
       'SELECT * FROM gifts ORDER BY id DESC LIMIT 20',
       (e, r) => (e ? rej(e) : res2(r))
     ));
+
+    // Dados dos gráficos da dashboard.
+    const qAll = (sql, p = []) => new Promise((res2, rej) => db.all(sql, p, (e, r) => (e ? rej(e) : res2(r))));
+    const salesByPlatform = await qAll(
+      `SELECT COALESCE(NULLIF(platform, ''), 'outros') AS plat, COUNT(*) AS n
+       FROM unlocks WHERE status = 'pago' GROUP BY plat`
+    );
+    const revenueByDay = await qAll(
+      `SELECT date(COALESCE(paid_at, created_at)) AS dia, COALESCE(SUM(amount), 0) AS total
+       FROM unlocks WHERE status = 'pago'
+       AND date(COALESCE(paid_at, created_at)) >= date('now', 'localtime', '-6 days')
+       GROUP BY dia`
+    );
+
+    const platNames = { uber: 'UBER', '99': '99POP', outros: 'Outros' };
+    const pieLabels = salesByPlatform.map((r) => platNames[r.plat] || r.plat);
+    const pieValues = salesByPlatform.map((r) => r.n);
+
+    const dayLabels = [];
+    const dayValues = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      dayLabels.push(key);
+      const row = revenueByDay.find((r) => r.dia === key);
+      dayValues.push(row ? row.total : 0);
+    }
+
     res.render('dashboard', {
       stats: {
         admins: admins.total,
@@ -164,6 +193,8 @@ app.get('/dashboard', auth, async (req, res) => {
         receita: (unlockRev.total || 0) + (refillRev.total || 0),
         pendentes: (pendingU.total || 0) + (pendingR.total || 0)
       },
+      chartPie: { labels: JSON.stringify(pieLabels), values: JSON.stringify(pieValues) },
+      chartBar: { labels: JSON.stringify(dayLabels), values: JSON.stringify(dayValues) },
       payments,
       gifts,
       adminsList,
@@ -343,6 +374,31 @@ app.post('/faces/:id/antecedentes', auth, (req, res) => {
   db.run('UPDATE faces SET antecedentes = 1 WHERE id = ?', [id], (err) => {
     if (err) return res.status(500).send(err.message);
     res.redirect('/cadastrar-face');
+  });
+});
+
+// Marca (ou desmarca) o produto como vendido em UMA plataforma específica,
+// mantendo a outra categoria ainda disponível para venda.
+app.post('/faces/:id/vender', auth, (req, res) => {
+  const id = Number(req.params.id);
+  const platform = req.body.platform;
+  const value = req.body.value === '0' ? 0 : 1;
+  if (platform !== 'uber' && platform !== '99') {
+    return res.status(400).send('Plataforma inválida.');
+  }
+  db.get('SELECT * FROM faces WHERE id = ?', [id], (err, face) => {
+    if (err) return res.status(500).send(err.message);
+    if (!face) return res.status(404).send('Face não encontrada.');
+    const supports =
+      platform === 'uber'
+        ? (face.platform === 'uber' || face.platform === 'uberx99' || !face.platform)
+        : (face.platform === '99' || face.platform === 'uberx99' || !face.platform);
+    if (!supports) return res.status(400).send('Produto não disponível nessa plataforma.');
+    const col = platform === 'uber' ? 'sold_uber' : 'sold_99';
+    db.run(`UPDATE faces SET ${col} = ? WHERE id = ?`, [value, id], (err2) => {
+      if (err2) return res.status(500).send(err2.message);
+      res.redirect('/cadastrar-face');
+    });
   });
 });
 
