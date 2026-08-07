@@ -8,7 +8,7 @@
 <link rel="stylesheet" href="/style.css">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
 </head>
-<body class="dash-bg">
+<body class="dash-bg" style="background-image: url('<%= bg || '/bg.jpg' %>');">
 <header class="topbar">
   <div class="brand"><% if (logo) { %><img src="<%= logo %>" alt="Logo"><% } else { %>Painel<% } %></div>
   <nav>
@@ -93,6 +93,30 @@
     <% if (logo) { %>
       <form method="POST" action="/logo/remove" class="logo-form" onsubmit="return confirm('Remover a logo atual?');">
         <button type="submit" class="btn danger">Remover logo</button>
+      </form>
+    <% } %>
+  </section>
+
+  <section class="panel">
+    <h2>🖼️ Fundo da Dashboard</h2>
+    <% if (bgMsg) { %>
+      <div class="alert success"><%= bgMsg %></div>
+    <% } %>
+    <% if (bgError) { %>
+      <div class="alert error"><%= bgError %></div>
+    <% } %>
+    <% if (bg) { %>
+      <div class="bg-preview"><img src="<%= bg %>" alt="Fundo atual"></div>
+    <% } else { %>
+      <p class="muted">Usando o fundo padrão. Envie uma imagem abaixo (JPG, PNG ou WEBP) para personalizar.</p>
+    <% } %>
+    <form method="POST" action="/bg" enctype="multipart/form-data" class="logo-form">
+      <input type="file" name="bg" accept="image/jpeg,image/png,image/webp" required>
+      <button type="submit" class="btn primary">Salvar fundo</button>
+    </form>
+    <% if (bg) { %>
+      <form method="POST" action="/bg/remove" class="logo-form" onsubmit="return confirm('Voltar ao fundo padrão?');">
+        <button type="submit" class="btn danger">Remover fundo</button>
       </form>
     <% } %>
   </section>
