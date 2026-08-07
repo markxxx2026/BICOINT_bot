@@ -123,51 +123,6 @@
       </tbody>
     </table>
   </section>
-
-  <section class="panel">
-    <h2>Últimos pagamentos (em tempo real)</h2>
-    <table>
-      <thead>
-        <tr>
-          <th>Tipo</th>
-          <th>Detalhe</th>
-          <th>Chat</th>
-          <th>Valor</th>
-          <th>Status</th>
-          <th>Data</th>
-        </tr>
-      </thead>
-      <tbody>
-        <% payments.forEach(p => { %>
-        <tr>
-          <td><%= p.tipo === 'unlock' ? '📸 Foto' : '💰 Recarga' %></td>
-          <td><%= p.descricao %></td>
-          <td><%= p.chat_id %></td>
-          <td>R$ <%= p.amount.toFixed(2).replace('.', ',') %></td>
-          <td>
-            <% if (p.tipo === 'refill') { %>
-              <% if (p.status === 'pago') { %>
-                <span class="badge blue">✅ Dinheiro adicionado</span>
-              <% } else { %>
-                <span class="badge warn">⏳ Pendente</span>
-              <% } %>
-            <% } else { %>
-              <% if (p.status === 'pago') { %>
-                <span class="badge vendido">✅ VENDIDO</span>
-              <% } else { %>
-                <span class="badge warn">⏳ Pendente</span>
-              <% } %>
-            <% } %>
-          </td>
-          <td><%= p.created_at %></td>
-        </tr>
-        <% }) %>
-        <% if (payments.length === 0) { %>
-        <tr><td colspan="6" class="empty">Nenhum pagamento ainda.</td></tr>
-        <% } %>
-      </tbody>
-    </table>
-  </section>
 </main>
 <script>
 (function () {

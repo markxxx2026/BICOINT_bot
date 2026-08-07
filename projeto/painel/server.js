@@ -144,13 +144,6 @@ app.get('/dashboard', auth, async (req, res) => {
       'SELECT id, username, created_at FROM admins ORDER BY id',
       (e, r) => (e ? rej(e) : res2(r))
     ));
-    const payments = await new Promise((res2, rej) => db.all(
-      `SELECT 'unlock' AS tipo, id, chat_id, amount, status, created_at, ('Foto #' || face_id) AS descricao FROM unlocks
-       UNION ALL
-       SELECT 'refill' AS tipo, id, chat_id, amount, status, created_at, 'Recarga' AS descricao FROM refills
-       ORDER BY created_at DESC, id DESC LIMIT 15`,
-      (e, r) => (e ? rej(e) : res2(r))
-    ));
     const gifts = await new Promise((res2, rej) => db.all(
       'SELECT * FROM gifts ORDER BY id DESC LIMIT 20',
       (e, r) => (e ? rej(e) : res2(r))
@@ -195,7 +188,6 @@ app.get('/dashboard', auth, async (req, res) => {
       },
       chartPie: { labels: JSON.stringify(pieLabels), values: JSON.stringify(pieValues) },
       chartBar: { labels: JSON.stringify(dayLabels), values: JSON.stringify(dayValues) },
-      payments,
       gifts,
       adminsList,
       newGift: req.query.gift || null
