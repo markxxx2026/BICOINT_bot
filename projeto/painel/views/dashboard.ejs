@@ -32,6 +32,10 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect><line x1="1" y1="10" x2="23" y2="10"></line></svg>
         Pagamentos
       </a>
+      <a href="/config">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+        Configurações
+      </a>
     </nav>
     <div class="sidebar-foot">
       <a href="/logout">
@@ -97,81 +101,6 @@
     <form method="POST" action="/gifts/gerar">
       <button type="submit" class="btn primary">🎁 Gerar Gift (vale 1 compra)</button>
     </form>
-  </section>
-
-  <section class="panel">
-    <h2>🖼️ Logo do painel (login e menu)</h2>
-    <p class="hint" style="margin-bottom: 12px;">Apenas a marca (logo). Isso <strong>não cadastra produtos</strong>.</p>
-    <% if (logoMsg) { %>
-      <div class="alert success"><%= logoMsg %></div>
-    <% } %>
-    <% if (logoError) { %>
-      <div class="alert error"><%= logoError %></div>
-    <% } %>
-    <% if (logo) { %>
-      <div class="logo-preview"><img src="<%= logo %>" alt="Logo atual"></div>
-    <% } else { %>
-      <p class="muted">Nenhuma logo definida. Envie uma imagem abaixo (JPG, PNG ou WEBP).</p>
-    <% } %>
-    <form method="POST" action="/logo" enctype="multipart/form-data" class="logo-form">
-      <input type="file" name="logo" accept="image/jpeg,image/png,image/webp" required>
-      <button type="submit" class="btn primary">Salvar logo</button>
-    </form>
-    <% if (logo) { %>
-      <form method="POST" action="/logo/remove" class="logo-form" onsubmit="return confirm('Remover a logo atual?');">
-        <button type="submit" class="btn danger">Remover logo</button>
-      </form>
-    <% } %>
-  </section>
-
-  <section class="panel">
-    <h2>🖼️ Fundo da Dashboard</h2>
-    <p class="hint" style="margin-bottom: 12px;">Apenas a imagem de fundo da Dashboard. Isso <strong>não cadastra produtos</strong>.</p>
-    <% if (bgMsg) { %>
-      <div class="alert success"><%= bgMsg %></div>
-    <% } %>
-    <% if (bgError) { %>
-      <div class="alert error"><%= bgError %></div>
-    <% } %>
-    <% if (bg) { %>
-      <div class="bg-preview"><img src="<%= bg %>" alt="Fundo atual"></div>
-    <% } else { %>
-      <p class="muted">Usando o fundo padrão. Envie uma imagem abaixo (JPG, PNG ou WEBP) para personalizar.</p>
-    <% } %>
-    <form method="POST" action="/bg" enctype="multipart/form-data" class="logo-form">
-      <input type="file" name="bg" accept="image/jpeg,image/png,image/webp" required>
-      <button type="submit" class="btn primary">Salvar fundo</button>
-    </form>
-    <% if (bg) { %>
-      <form method="POST" action="/bg/remove" class="logo-form" onsubmit="return confirm('Voltar ao fundo padrão?');">
-        <button type="submit" class="btn danger">Remover fundo</button>
-      </form>
-    <% } %>
-  </section>
-
-  <section class="panel">
-    <h2>🖼️ Fundo da tela de login</h2>
-    <p class="hint" style="margin-bottom: 12px;">Apenas o fundo da tela de login. Isso <strong>não cadastra produtos</strong>.</p>
-    <% if (loginbgMsg) { %>
-      <div class="alert success"><%= loginbgMsg %></div>
-    <% } %>
-    <% if (loginbgError) { %>
-      <div class="alert error"><%= loginbgError %></div>
-    <% } %>
-    <% if (loginbg) { %>
-      <div class="bg-preview"><img src="<%= loginbg %>" alt="Fundo do login atual"></div>
-    <% } else { %>
-      <p class="muted">Login sem fundo (preto). Envie uma imagem abaixo (JPG, PNG ou WEBP) para personalizar.</p>
-    <% } %>
-    <form method="POST" action="/loginbg" enctype="multipart/form-data" class="logo-form">
-      <input type="file" name="loginbg" accept="image/jpeg,image/png,image/webp" required>
-      <button type="submit" class="btn primary">Salvar fundo do login</button>
-    </form>
-    <% if (loginbg) { %>
-      <form method="POST" action="/loginbg/remove" class="logo-form" onsubmit="return confirm('Voltar ao fundo preto do login?');">
-        <button type="submit" class="btn danger">Remover fundo do login</button>
-      </form>
-    <% } %>
   </section>
 
   <section class="panel">

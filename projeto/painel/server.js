@@ -144,7 +144,7 @@ function detectImageMime(buf) {
 function handleImageUpload(req, res, which) {
   const { mime, data, prefix } = BRAND_KEYS[which];
   const back = (msg, isErr) =>
-    res.redirect('/dashboard?' + prefix + (isErr ? 'Error' : 'Msg') + '=' + encodeURIComponent(msg));
+    res.redirect('/config?' + prefix + (isErr ? 'Error' : 'Msg') + '=' + encodeURIComponent(msg));
   if (!req.file) return back('Escolha um arquivo de imagem.', true);
   const buf = req.file.buffer;
   const mimeType = detectImageMime(buf);
@@ -169,7 +169,7 @@ app.post('/logo/remove', auth, (req, res) => {
   db.run("DELETE FROM settings WHERE key IN ('logo_mime', 'logo_data')", () => {
     loadBrandSettings();
     storage.uploadDbSnapshot().catch(() => {});
-    res.redirect('/dashboard?logoMsg=' + encodeURIComponent('Logo removida.'));
+    res.redirect('/config?logoMsg=' + encodeURIComponent('Logo removida.'));
   });
 });
 
@@ -179,7 +179,7 @@ app.post('/bg/remove', auth, (req, res) => {
   db.run("DELETE FROM settings WHERE key IN ('bg_mime', 'bg_data')", () => {
     loadBrandSettings();
     storage.uploadDbSnapshot().catch(() => {});
-    res.redirect('/dashboard?bgMsg=' + encodeURIComponent('Fundo removido (volta ao padrão).'));
+    res.redirect('/config?bgMsg=' + encodeURIComponent('Fundo removido (volta ao padrão).'));
   });
 });
 
@@ -189,7 +189,7 @@ app.post('/loginbg/remove', auth, (req, res) => {
   db.run("DELETE FROM settings WHERE key IN ('loginbg_mime', 'loginbg_data')", () => {
     loadBrandSettings();
     storage.uploadDbSnapshot().catch(() => {});
-    res.redirect('/dashboard?loginbgMsg=' + encodeURIComponent('Fundo do login removido (volta ao preto).'));
+    res.redirect('/config?loginbgMsg=' + encodeURIComponent('Fundo do login removido (volta ao preto).'));
   });
 });
 
@@ -290,17 +290,22 @@ app.get('/dashboard', auth, async (req, res) => {
       chartBar: { labels: JSON.stringify(dayLabels), values: JSON.stringify(dayValues) },
       gifts,
       adminsList,
-      newGift: req.query.gift || null,
-      logoMsg: req.query.logoMsg || null,
-      logoError: req.query.logoError || null,
-      bgMsg: req.query.bgMsg || null,
-      bgError: req.query.bgError || null,
-      loginbgMsg: req.query.loginbgMsg || null,
-      loginbgError: req.query.loginbgError || null
+      newGift: req.query.gift || null
     });
   } catch (err) {
     res.status(500).send(err.message);
   }
+});
+
+app.get('/config', auth, (req, res) => {
+  res.render('config', {
+    logoMsg: req.query.logoMsg || null,
+    logoError: req.query.logoError || null,
+    bgMsg: req.query.bgMsg || null,
+    bgError: req.query.bgError || null,
+    loginbgMsg: req.query.loginbgMsg || null,
+    loginbgError: req.query.loginbgError || null
+  });
 });
 
 app.get('/cadastrar', auth, (req, res) => {
