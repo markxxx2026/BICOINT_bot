@@ -129,6 +129,14 @@ textarea {
   border: 1px solid rgba(255, 255, 255, 0.25);
 }
 
+.add-products-banner {
+  border: 1px solid #38bdf8;
+  background: rgba(0, 0, 0, 0.6);
+}
+
+.add-products-banner h2 { margin-bottom: 6px; }
+.add-products-banner p { margin-bottom: 14px; color: #e2e8f0; }
+
 .topbar nav { display: flex; gap: 16px; }
 
 .topbar nav a {

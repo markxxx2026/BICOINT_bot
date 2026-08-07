@@ -3,7 +3,6 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta http-equiv="refresh" content="5">
 <title>Dashboard | Painel</title>
 <link rel="stylesheet" href="/style.css">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
@@ -21,6 +20,13 @@
   </nav>
 </header>
 <main>
+  <section class="panel add-products-banner">
+    <h2>📸 Adicionar fotos de produtos</h2>
+    <p>Para cadastrar produtos (fotos com rosto que aparecem para os clientes no bot), use a página
+      <strong>Importar</strong>: arraste as fotos na área de upload e acompanhe o progresso.</p>
+    <a href="/importar" class="btn primary" style="display:inline-block;">Ir para Importar fotos</a>
+  </section>
+
   <div class="cards">
     <div class="card">
       <h2><%= stats.users %></h2>
@@ -75,6 +81,7 @@
 
   <section class="panel">
     <h2>🖼️ Logo do painel (login e menu)</h2>
+    <p class="hint" style="margin-bottom: 12px;">Apenas a marca (logo). Isso <strong>não cadastra produtos</strong>.</p>
     <% if (logoMsg) { %>
       <div class="alert success"><%= logoMsg %></div>
     <% } %>
@@ -99,6 +106,7 @@
 
   <section class="panel">
     <h2>🖼️ Fundo da Dashboard</h2>
+    <p class="hint" style="margin-bottom: 12px;">Apenas a imagem de fundo da Dashboard. Isso <strong>não cadastra produtos</strong>.</p>
     <% if (bgMsg) { %>
       <div class="alert success"><%= bgMsg %></div>
     <% } %>
