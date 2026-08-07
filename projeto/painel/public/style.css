@@ -350,10 +350,24 @@ select {
 .import-stats strong { color: #e2e8f0; }
 
 body.dash-bg {
-  background-image: url('/bg.jpg');
+  background-color: #000;
+}
+
+body.dash-bg::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  background-image: var(--bg, url('/bg.jpg'));
   background-size: cover;
   background-position: center;
-  background-attachment: fixed;
+  background-repeat: no-repeat;
+}
+
+body.dash-bg .topbar,
+body.dash-bg main {
+  position: relative;
+  z-index: 1;
 }
 
 .charts-row {

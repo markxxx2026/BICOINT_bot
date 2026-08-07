@@ -7,7 +7,7 @@
 <link rel="stylesheet" href="/style.css">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
 </head>
-<body class="dash-bg" style="background-image: url('<%= bg || '/bg.jpg' %>');">
+<body class="dash-bg" style="--bg: url('<%= bg || '/bg.jpg' %>');">
 <header class="topbar">
   <div class="brand"><% if (logo) { %><img src="<%= logo %>" alt="Logo"><% } else { %>Painel<% } %></div>
   <nav>
