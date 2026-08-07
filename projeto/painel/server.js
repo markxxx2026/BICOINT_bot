@@ -151,6 +151,7 @@ function handleImageUpload(req, res, which) {
   upsert(mime, mimeType, () => {
     upsert(data, buf.toString('base64'), () => {
       loadBrandSettings();
+      storage.uploadDbSnapshot().catch(() => {});
       back('Imagem salva com sucesso.', false);
     });
   });
@@ -161,6 +162,7 @@ app.post('/logo', auth, importUpload.single('logo'), (req, res) => handleImageUp
 app.post('/logo/remove', auth, (req, res) => {
   db.run("DELETE FROM settings WHERE key IN ('logo_mime', 'logo_data')", () => {
     loadBrandSettings();
+    storage.uploadDbSnapshot().catch(() => {});
     res.redirect('/dashboard?logoMsg=' + encodeURIComponent('Logo removida.'));
   });
 });
@@ -170,6 +172,7 @@ app.post('/bg', auth, importUpload.single('bg'), (req, res) => handleImageUpload
 app.post('/bg/remove', auth, (req, res) => {
   db.run("DELETE FROM settings WHERE key IN ('bg_mime', 'bg_data')", () => {
     loadBrandSettings();
+    storage.uploadDbSnapshot().catch(() => {});
     res.redirect('/dashboard?bgMsg=' + encodeURIComponent('Fundo removido (volta ao padrão).'));
   });
 });
