@@ -6,7 +6,7 @@
 <title>Login | Painel</title>
 <link rel="stylesheet" href="/style.css">
 </head>
-<body class="login-body">
+<body class="login-body" style="--loginbg: url('<%= loginbg || '' %>');">
 <div class="login-card">
   <% if (logo) { %>
     <img class="login-logo" src="<%= logo %>" alt="Logo">

@@ -93,18 +93,20 @@ const importUpload = multer({
   limits: { fileSize: 15 * 1024 * 1024 }
 });
 
-// --- Imagens personalizáveis: logo (login/menu) e fundo da dashboard -------
+// --- Imagens personalizáveis: logo (login/menu), fundo da dashboard e login ----
 const BRAND_KEYS = {
   logo: { mime: 'logo_mime', data: 'logo_data', prefix: 'logo' },
-  bg: { mime: 'bg_mime', data: 'bg_data', prefix: 'bg' }
+  bg: { mime: 'bg_mime', data: 'bg_data', prefix: 'bg' },
+  loginbg: { mime: 'loginbg_mime', data: 'loginbg_data', prefix: 'loginbg' }
 };
 
 let logoDataUrl = null;
 let bgDataUrl = null;
+let loginBgDataUrl = null;
 let brandReady = null;
 function loadBrandSettings() {
   brandReady = new Promise((resolve) => {
-    db.all('SELECT key, value FROM settings WHERE key IN ("logo_mime","logo_data","bg_mime","bg_data")', (err, rows) => {
+    db.all('SELECT key, value FROM settings WHERE key IN ("logo_mime","logo_data","bg_mime","bg_data","loginbg_mime","loginbg_data")', (err, rows) => {
       const map = {};
       (rows || []).forEach((r) => { map[r.key] = r.value; });
       logoDataUrl = (map.logo_data && map.logo_mime)
@@ -112,6 +114,9 @@ function loadBrandSettings() {
         : null;
       bgDataUrl = (map.bg_data && map.bg_mime)
         ? `data:${map.bg_mime};base64,${map.bg_data}`
+        : null;
+      loginBgDataUrl = (map.loginbg_data && map.loginbg_mime)
+        ? `data:${map.loginbg_mime};base64,${map.loginbg_data}`
         : null;
       resolve();
     });
@@ -124,6 +129,7 @@ app.use((req, res, next) => {
   p.then(() => {
     res.locals.logo = logoDataUrl;
     res.locals.bg = bgDataUrl;
+    res.locals.loginbg = loginBgDataUrl;
     next();
   });
 });
@@ -174,6 +180,16 @@ app.post('/bg/remove', auth, (req, res) => {
     loadBrandSettings();
     storage.uploadDbSnapshot().catch(() => {});
     res.redirect('/dashboard?bgMsg=' + encodeURIComponent('Fundo removido (volta ao padrão).'));
+  });
+});
+
+app.post('/loginbg', auth, importUpload.single('loginbg'), (req, res) => handleImageUpload(req, res, 'loginbg'));
+
+app.post('/loginbg/remove', auth, (req, res) => {
+  db.run("DELETE FROM settings WHERE key IN ('loginbg_mime', 'loginbg_data')", () => {
+    loadBrandSettings();
+    storage.uploadDbSnapshot().catch(() => {});
+    res.redirect('/dashboard?loginbgMsg=' + encodeURIComponent('Fundo do login removido (volta ao preto).'));
   });
 });
 
@@ -278,7 +294,9 @@ app.get('/dashboard', auth, async (req, res) => {
       logoMsg: req.query.logoMsg || null,
       logoError: req.query.logoError || null,
       bgMsg: req.query.bgMsg || null,
-      bgError: req.query.bgError || null
+      bgError: req.query.bgError || null,
+      loginbgMsg: req.query.loginbgMsg || null,
+      loginbgError: req.query.loginbgError || null
     });
   } catch (err) {
     res.status(500).send(err.message);
