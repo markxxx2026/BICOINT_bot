@@ -93,6 +93,60 @@ const importUpload = multer({
   limits: { fileSize: 15 * 1024 * 1024 }
 });
 
+// --- Logo do painel (login e menu) -----------------------------------------
+let logoDataUrl = null;
+let logoReady = null;
+function loadLogo() {
+  logoReady = new Promise((resolve) => {
+    db.all('SELECT key, value FROM settings WHERE key IN ("logo_mime", "logo_data")', (err, rows) => {
+      const map = {};
+      (rows || []).forEach((r) => { map[r.key] = r.value; });
+      logoDataUrl = (map.logo_data && map.logo_mime)
+        ? `data:${map.logo_mime};base64,${map.logo_data}`
+        : null;
+      resolve();
+    });
+  });
+}
+loadLogo();
+
+app.use((req, res, next) => {
+  const p = logoReady || Promise.resolve();
+  p.then(() => {
+    res.locals.logo = logoDataUrl;
+    next();
+  });
+});
+
+app.post('/logo', auth, importUpload.single('logo'), (req, res) => {
+  const back = (msg, isErr) => res.redirect('/dashboard?logo' + (isErr ? 'Error' : 'Msg') + '=' + encodeURIComponent(msg));
+  if (!req.file) return back('Escolha um arquivo de imagem.', true);
+  const buf = req.file.buffer;
+  let mime = null;
+  if (buf.length > 3 && buf[0] === 0xFF && buf[1] === 0xD8 && buf[2] === 0xFF) mime = 'image/jpeg';
+  else if (buf.length > 8 && buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4E && buf[3] === 0x47) mime = 'image/png';
+  else if (buf.length > 12 && buf.toString('ascii', 0, 4) === 'RIFF' && buf.toString('ascii', 8, 12) === 'WEBP') mime = 'image/webp';
+  if (!mime) return back('Formato inválido. Use JPG, PNG ou WEBP.', true);
+  const upsert = (key, value, nextFn) => db.run(
+    'INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
+    [key, value],
+    nextFn
+  );
+  upsert('logo_mime', mime, () => {
+    upsert('logo_data', buf.toString('base64'), () => {
+      loadLogo();
+      back('Logo salva com sucesso.', false);
+    });
+  });
+});
+
+app.post('/logo/remove', auth, (req, res) => {
+  db.run("DELETE FROM settings WHERE key IN ('logo_mime', 'logo_data')", () => {
+    loadLogo();
+    res.redirect('/dashboard?logoMsg=' + encodeURIComponent('Logo removida.'));
+  });
+});
+
 app.get('/', (req, res) => res.redirect('/login'));
 
 app.get('/login', (req, res) => {
@@ -190,7 +244,9 @@ app.get('/dashboard', auth, async (req, res) => {
       chartBar: { labels: JSON.stringify(dayLabels), values: JSON.stringify(dayValues) },
       gifts,
       adminsList,
-      newGift: req.query.gift || null
+      newGift: req.query.gift || null,
+      logoMsg: req.query.logoMsg || null,
+      logoError: req.query.logoError || null
     });
   } catch (err) {
     res.status(500).send(err.message);

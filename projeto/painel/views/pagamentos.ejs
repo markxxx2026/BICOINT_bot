@@ -8,7 +8,7 @@
 </head>
 <body>
 <header class="topbar">
-  <div class="brand">Painel</div>
+  <div class="brand"><% if (logo) { %><img src="<%= logo %>" alt="Logo"><% } else { %>Painel<% } %></div>
   <nav>
     <a href="/dashboard">Dashboard</a>
     <a href="/importar">Importar</a>

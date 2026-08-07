@@ -122,6 +122,10 @@ db.serialize(() => {
     created_at TEXT DEFAULT (datetime('now','localtime')),
     paid_at TEXT
   )`);
+  db.run(`CREATE TABLE IF NOT EXISTS settings (
+    key TEXT PRIMARY KEY,
+    value TEXT
+  )`);
 });
 
 module.exports = db;

@@ -8,6 +8,9 @@
 </head>
 <body class="login-body">
 <div class="login-card">
+  <% if (logo) { %>
+    <img class="login-logo" src="<%= logo %>" alt="Logo">
+  <% } %>
   <h1>Painel de Controle</h1>
   <p class="muted">Acesse para gerenciar o serviço</p>
   <% if (error) { %>

@@ -10,7 +10,7 @@
 </head>
 <body class="dash-bg">
 <header class="topbar">
-  <div class="brand">Painel</div>
+  <div class="brand"><% if (logo) { %><img src="<%= logo %>" alt="Logo"><% } else { %>Painel<% } %></div>
   <nav>
     <a href="/dashboard">Dashboard</a>
     <a href="/importar">Importar</a>
@@ -71,6 +71,30 @@
     <form method="POST" action="/gifts/gerar">
       <button type="submit" class="btn primary">🎁 Gerar Gift (vale 1 compra)</button>
     </form>
+  </section>
+
+  <section class="panel">
+    <h2>🖼️ Logo do painel (login e menu)</h2>
+    <% if (logoMsg) { %>
+      <div class="alert success"><%= logoMsg %></div>
+    <% } %>
+    <% if (logoError) { %>
+      <div class="alert error"><%= logoError %></div>
+    <% } %>
+    <% if (logo) { %>
+      <div class="logo-preview"><img src="<%= logo %>" alt="Logo atual"></div>
+    <% } else { %>
+      <p class="muted">Nenhuma logo definida. Envie uma imagem abaixo (JPG, PNG ou WEBP).</p>
+    <% } %>
+    <form method="POST" action="/logo" enctype="multipart/form-data" class="logo-form">
+      <input type="file" name="logo" accept="image/jpeg,image/png,image/webp" required>
+      <button type="submit" class="btn primary">Salvar logo</button>
+    </form>
+    <% if (logo) { %>
+      <form method="POST" action="/logo/remove" class="logo-form" onsubmit="return confirm('Remover a logo atual?');">
+        <button type="submit" class="btn danger">Remover logo</button>
+      </form>
+    <% } %>
   </section>
 
   <section class="panel">

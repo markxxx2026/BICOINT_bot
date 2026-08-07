@@ -96,6 +96,30 @@ textarea {
 
 .topbar .brand { font-weight: 700; font-size: 1.1rem; color: #38bdf8; text-shadow: 0 1px 4px rgba(0,0,0,0.9); }
 
+.brand img { height: 36px; width: auto; display: block; border-radius: 6px; }
+
+.login-logo {
+  max-width: 240px;
+  max-height: 120px;
+  display: block;
+  margin: 0 auto 16px;
+  border-radius: 8px;
+}
+
+.logo-form { display: flex; gap: 10px; align-items: center; margin-top: 12px; flex-wrap: wrap; }
+
+.logo-form input[type="file"] { color: #e2e8f0; }
+
+.logo-preview { margin: 12px 0; }
+
+.logo-preview img {
+  max-width: 220px;
+  max-height: 120px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.1);
+}
+
 .topbar nav { display: flex; gap: 16px; }
 
 .topbar nav a {
