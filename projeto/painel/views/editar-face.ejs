@@ -93,7 +93,7 @@
 
     <section class="panel">
       <h2>Foto atual</h2>
-      <img class="face-preview" src="/faces/<%= face.photo %>" alt="<%= face.name %>">
+      <img class="face-preview" src="<%= face.url || ('/faces/' + face.photo) %>" alt="<%= face.name %>">
       <p>
         <span class="tag <%= (face.platform === 'uber' || face.platform === 'uberx99') && !face.sold_uber ? 'ok' : 'warn' %>">UBER: <%= (face.platform === 'uber' || face.platform === 'uberx99') ? (face.sold_uber ? 'vendido' : 'ativo') : '—' %></span>
         <span class="tag <%= (face.platform === '99' || face.platform === 'uberx99') && !face.sold_99 ? 'ok' : 'warn' %>">99: <%= (face.platform === '99' || face.platform === 'uberx99') ? (face.sold_99 ? 'vendido' : 'ativo') : '—' %></span>

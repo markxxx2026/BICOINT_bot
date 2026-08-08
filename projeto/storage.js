@@ -232,6 +232,21 @@ async function getRemote(key) {
   }
 }
 
+// Gera uma URL assinada (presigned GET) para o objeto — o Telegram e o
+// navegador baixam direto do R2/S3, sem o tráfego passar pelo servidor
+// (evita estourar a banda da Render). Sem remoto ativo, retorna null.
+async function presignedUrl(key, expiresIn = 3600) {
+  if (!usingRemote) return null;
+  try {
+    const { GetObjectCommand } = require('@aws-sdk/client-s3');
+    const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
+    return await getSignedUrl(client, new GetObjectCommand({ Bucket: bucket, Key: key }), { expiresIn });
+  } catch (e) {
+    console.error(`[storage] presigned falhou "${key}":`, e.message);
+    return null;
+  }
+}
+
 async function list(prefix = 'photos/') {
   if (!usingRemote) {
     const dir = prefix === 'photos/blurred/' ? BLURRED_DIR : FACES_DIR;
@@ -387,6 +402,7 @@ module.exports = {
   remove,
   exists,
   list,
+  presignedUrl,
   uploadDbSnapshot,
   restoreDb,
   syncLocalPhotosToRemote,

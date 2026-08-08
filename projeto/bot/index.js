@@ -13,6 +13,23 @@ const storage = require('../storage');
 
 storage.init().catch((e) => console.error('Erro ao iniciar storage:', e.message));
 
+// Envia a foto pela URL assinada (Telegram baixa direto do R2, sem passar
+// pela Render). Se a URL falhar ou não houver remoto, baixa o buffer e envia.
+async function sendPhotoSmart(chatId, key, caption, extra) {
+  const opts = { caption, ...(extra || {}) };
+  const url = await storage.presignedUrl(key, 1800);
+  if (url) {
+    try {
+      return await bot.sendPhoto(chatId, url, opts);
+    } catch (e) {
+      console.error(`[FOTO] envio por URL falhou "${key}": ${e.message}. Usando buffer.`);
+    }
+  }
+  const buf = await storage.get(key);
+  if (buf) return await bot.sendPhoto(chatId, buf, opts);
+  return null;
+}
+
 const token = process.env.TELEGRAM_BOT_TOKEN;
 const PRICE = Number(process.env.PRICE_FULL_PHOTO || 10);
 
@@ -450,18 +467,21 @@ async function runSearch(chatId) {
     const chosenPlatform = f.platform && (f.platform === 'uber' || f.platform === '99') ? f.platform : null;
 
     bot.sendChatAction(chatId, 'upload_photo').catch(() => {});
-    const blurredBuffer = await blur.getBlurredBuffer(match.face.photo);
-    if (blurredBuffer) {
-      await bot.sendPhoto(chatId, blurredBuffer, {
-        caption,
-        reply_markup: {
-          inline_keyboard: [[
-            { text: '💰 Pagar e desbloquear', callback_data: `unlock:${match.face.id}:${chosenPlatform || ''}`, style: 'success' }
-          ]]
-        }
-      });
-    } else {
-      await bot.sendMessage(chatId, caption);
+    const blurredKey = blur.blurredKeyFor(match.face.photo);
+    const sendOpts = {
+      caption,
+      reply_markup: {
+        inline_keyboard: [[
+          { text: '💰 Pagar e desbloquear', callback_data: `unlock:${match.face.id}:${chosenPlatform || ''}`, style: 'success' }
+        ]]
+      }
+    };
+    const blurredSent = await sendPhotoSmart(chatId, blurredKey, caption, sendOpts);
+    if (!blurredSent) {
+      // Fallback: garante a versão borrada (gera se necessário) e envia o buffer.
+      const blurredBuffer = await blur.getBlurredBuffer(match.face.photo);
+      if (blurredBuffer) await bot.sendPhoto(chatId, blurredBuffer, sendOpts);
+      else await bot.sendMessage(chatId, caption);
     }
 
     delete session[chatId];
@@ -832,14 +852,12 @@ bot.on('callback_query', async (query) => {
           chatId,
           '🎁 Compra liberada com seus créditos! Enviando a foto completa...'
         ).catch(() => {});
-        const photoBuffer = await storage.get('photos/' + face.photo);
-        if (photoBuffer) {
-          await bot.sendPhoto(chatId, photoBuffer, {
-            caption:
-              unlockCaption(face) +
-              `\n\n💰 Saldo restante: R$ ${novoSaldo.toFixed(2).replace('.', ',')}`
-          });
-        } else {
+        const sentPhoto = await sendPhotoSmart(
+          chatId,
+          'photos/' + face.photo,
+          unlockCaption(face) + `\n\n💰 Saldo restante: R$ ${novoSaldo.toFixed(2).replace('.', ',')}`
+        );
+        if (!sentPhoto) {
           await bot.sendMessage(chatId, unlockCaption(face));
         }
         return;
@@ -881,12 +899,8 @@ async function deliverPaidUnlocks() {
         try {
           db.get('SELECT * FROM faces WHERE id = ?', [u.face_id], async (e, face) => {
             if (e || !face) return;
-            const photoBuffer = await storage.get('photos/' + face.photo);
-            if (photoBuffer) {
-              await bot.sendPhoto(u.chat_id, photoBuffer, {
-                caption: unlockCaption(face)
-              });
-            } else {
+            const sentPhoto = await sendPhotoSmart(u.chat_id, 'photos/' + face.photo, unlockCaption(face));
+            if (!sentPhoto) {
               await bot.sendMessage(u.chat_id, unlockCaption(face));
             }
             db.run("UPDATE unlocks SET notified = 1 WHERE id = ?", [u.id]);

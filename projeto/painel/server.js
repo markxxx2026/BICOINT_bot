@@ -354,6 +354,18 @@ function sanitizeRelPath(rel) {
   return parts.join(path.sep);
 }
 
+// Adiciona uma URL pública (presigned) a cada foto — o navegador baixa
+// direto do R2, sem o tráfego passar pela Render. Sem remoto ativo (ou se a
+// assinatura falhar), mantém o proxy local /faces/ como fallback.
+async function withPhotoUrls(faces) {
+  return Promise.all(
+    faces.map(async (f) => {
+      const url = await storage.presignedUrl('photos/' + f.photo);
+      return { ...f, url: url || '/faces/' + f.photo };
+    })
+  );
+}
+
 app.get('/importar', auth, (req, res) => {
   res.render('importer', { status: importer.getStatus(), error: null, success: null });
 });
@@ -408,18 +420,20 @@ app.get('/api/importer/status', auth, (req, res) => {
 
 const LIST_SQL = 'SELECT * FROM faces WHERE COALESCE(antecedentes, 0) = 0 ORDER BY id';
 
-app.get('/cadastrar-face', auth, (req, res) => {
-  db.all(LIST_SQL, (err, faces) => {
+app.get('/cadastrar-face', auth, async (req, res) => {
+  db.all(LIST_SQL, async (err, faces) => {
     if (err) return res.status(500).send(err.message);
-    res.render('cadastrar-face', { error: null, success: null, faces });
+    const withUrl = await withPhotoUrls(faces || []);
+    res.render('cadastrar-face', { error: null, success: null, faces: withUrl });
   });
 });
 
 app.post('/cadastrar-face', auth, faceUpload.single('foto'), async (req, res) => {
   const render = (error, success) => {
-    db.all(LIST_SQL, (err, faces) => {
+    db.all(LIST_SQL, async (err, faces) => {
       if (err) return res.status(500).send(err.message);
-      res.render('cadastrar-face', { error, success, faces });
+      const withUrl = await withPhotoUrls(faces || []);
+      res.render('cadastrar-face', { error, success, faces: withUrl });
     });
   };
 
@@ -519,10 +533,11 @@ app.post('/faces/:id/vender', auth, (req, res) => {
 
 app.get('/faces/:id/editar', auth, (req, res) => {
   const id = Number(req.params.id);
-  db.get('SELECT * FROM faces WHERE id = ?', [id], (err, face) => {
+  db.get('SELECT * FROM faces WHERE id = ?', [id], async (err, face) => {
     if (err) return res.status(500).send(err.message);
     if (!face) return res.status(404).send('Face não encontrada.');
-    res.render('editar-face', { face, error: null, success: null });
+    const url = await storage.presignedUrl('photos/' + face.photo);
+    res.render('editar-face', { face: { ...face, url: url || '/faces/' + face.photo }, error: null, success: null });
   });
 });
 

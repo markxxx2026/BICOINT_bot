@@ -97,7 +97,7 @@
         <div class="face-grid">
           <% faces.forEach(f => { %>
           <div class="face-card">
-            <img src="/faces/<%= f.photo %>" alt="<%= f.name %>">
+            <img src="<%= f.url || ('/faces/' + f.photo) %>" alt="<%= f.name %>">
             <div class="face-info">
               <strong>#<%= f.id %></strong>
               <span><%= f.name %></span>
