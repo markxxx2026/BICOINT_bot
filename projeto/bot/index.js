@@ -74,16 +74,16 @@ db.get(
   }
 );
 
-// Cancela cobranças pendentes antigas do Asaas (IDs 'pay_...') que não existem
-// mais no Mercado Pago, evitando consultas 404 a cada 5s e reuso de PIX inválido.
+// Cancela cobranças pendentes do gateway legado (IDs antigos 'pay_...') que não
+// existem mais no Mercado Pago, evitando consultas 404 a cada 5s e reuso de PIX inválido.
 db.run(
-  "UPDATE unlocks SET status = 'cancelado' WHERE status = 'pendente' AND asaas_id IS NOT NULL AND asaas_id != '' AND asaas_id NOT GLOB '[0-9]*'",
+  "UPDATE unlocks SET status = 'cancelado' WHERE status = 'pendente' AND gateway_id IS NOT NULL AND gateway_id != '' AND gateway_id NOT GLOB '[0-9]*'",
   (err) => {
     if (!err) {
       db.run(
-        "UPDATE refills SET status = 'cancelado' WHERE status = 'pendente' AND asaas_id IS NOT NULL AND asaas_id != '' AND asaas_id NOT GLOB '[0-9]*'"
+        "UPDATE refills SET status = 'cancelado' WHERE status = 'pendente' AND gateway_id IS NOT NULL AND gateway_id != '' AND gateway_id NOT GLOB '[0-9]*'"
       );
-      console.log('[DB] Cobranças pendentes antigas (Asaas) canceladas na migração para Mercado Pago.');
+      console.log('[DB] Cobranças pendentes do gateway legado (IDs antigos) canceladas na migração para Mercado Pago.');
     }
   }
 );
@@ -283,7 +283,7 @@ function pixConfigProblem() {
   const token = String(process.env.MP_ACCESS_TOKEN || '').trim();
   const email = String(process.env.MP_PAYER_EMAIL || '').trim();
   if (!token) {
-    console.error('[PIX] MP_ACCESS_TOKEN ausente no processo. O bot já usa o padrão do Mercado Pago (não Asaas).');
+    console.error('[PIX] MP_ACCESS_TOKEN ausente no processo.');
     return 'token';
   }
   if (!email) {
@@ -316,7 +316,7 @@ async function startRefillPayment(chatId, value) {
     const qr = await mp.getPixQrCode(payment.id);
 
     db.run(
-      "INSERT INTO refills (chat_id, amount, asaas_id, status) VALUES (?, ?, ?, 'pendente')",
+      "INSERT INTO refills (chat_id, amount, gateway_id, status) VALUES (?, ?, ?, 'pendente')",
       [chatId, value, payment.id],
       async (err2) => {
         if (err2) return bot.sendMessage(chatId, 'Erro ao gerar o pagamento.');
@@ -524,16 +524,16 @@ async function generatePixUnlock(chatId, face, platform) {
 
   const existing = await new Promise((resolve, reject) => {
     db.get(
-      "SELECT id, asaas_id FROM unlocks WHERE chat_id = ? AND face_id = ? AND COALESCE(platform, '') = ? AND status = 'pendente' AND asaas_id IS NOT NULL AND asaas_id != '' ORDER BY id DESC LIMIT 1",
+      "SELECT id, gateway_id FROM unlocks WHERE chat_id = ? AND face_id = ? AND COALESCE(platform, '') = ? AND status = 'pendente' AND gateway_id IS NOT NULL AND gateway_id != '' ORDER BY id DESC LIMIT 1",
       [chatId, face.id, platform || ''],
       (err, row) => (err ? reject(err) : resolve(row))
     );
   });
 
-  const canReuse = !!(existing && existing.asaas_id && /^\d+$/.test(String(existing.asaas_id)));
-  let asaasId;
+  const canReuse = !!(existing && existing.gateway_id && /^\d+$/.test(String(existing.gateway_id)));
+  let paymentId;
   if (canReuse) {
-    asaasId = existing.asaas_id;
+    paymentId = existing.gateway_id;
   } else {
     const externalReference = `BICO${chatId}_${face.id}_${platform || 'x'}_${Date.now()}`;
     const payment = await mp.createPixPayment({
@@ -542,11 +542,11 @@ async function generatePixUnlock(chatId, face, platform) {
       externalReference,
       description: `Foto completa ${face.name} (ID ${face.id})${platform ? ' - ' + platform.toUpperCase() : ''}`
     });
-    asaasId = payment.id;
-    if (existing && existing.asaas_id) {
+    paymentId = payment.id;
+    if (existing && existing.gateway_id) {
       await new Promise((resolve, reject) => {
         db.run(
-          "UPDATE unlocks SET asaas_id = ?, pix_code = NULL, status = 'pendente', created_at = datetime('now','localtime') WHERE id = ?",
+          "UPDATE unlocks SET gateway_id = ?, pix_code = NULL, status = 'pendente', created_at = datetime('now','localtime') WHERE id = ?",
           [payment.id, existing.id],
           (err) => (err ? reject(err) : resolve())
         );
@@ -554,7 +554,7 @@ async function generatePixUnlock(chatId, face, platform) {
     } else {
       await new Promise((resolve, reject) => {
         db.run(
-          `INSERT INTO unlocks (chat_id, face_id, amount, pix_code, asaas_id, platform, status) VALUES (?, ?, ?, ?, ?, ?, 'pendente')`,
+          `INSERT INTO unlocks (chat_id, face_id, amount, pix_code, gateway_id, platform, status) VALUES (?, ?, ?, ?, ?, ?, 'pendente')`,
           [chatId, face.id, amount, null, payment.id, platform || null],
           (err) => (err ? reject(err) : resolve())
         );
@@ -562,7 +562,7 @@ async function generatePixUnlock(chatId, face, platform) {
     }
   }
 
-  const qr = await mp.getPixQrCode(asaasId);
+  const qr = await mp.getPixQrCode(paymentId);
   let qrBuffer;
   if (qr.encodedImage) {
     qrBuffer = Buffer.from(String(qr.encodedImage).replace(/^data:image\/\w+;base64,/, ''), 'base64');
@@ -934,15 +934,15 @@ async function deliverPaidUnlocks() {
 
 setInterval(deliverPaidUnlocks, 5000);
 
-async function checkAsaasPayments() {
+async function checkPendingPayments() {
   if (!process.env.MP_ACCESS_TOKEN) return;
   db.all(
-    "SELECT * FROM unlocks WHERE status = 'pendente' AND asaas_id IS NOT NULL AND asaas_id != ''",
+    "SELECT * FROM unlocks WHERE status = 'pendente' AND gateway_id IS NOT NULL AND gateway_id != ''",
     async (err, unlocks) => {
       if (err) return;
       for (const u of unlocks) {
         try {
-          const status = await mp.getPaymentStatus(u.asaas_id);
+          const status = await mp.getPaymentStatus(u.gateway_id);
           if (status === 'RECEIVED' || status === 'CONFIRMED') {
             db.run(
               "UPDATE unlocks SET status = 'pago', paid_at = datetime('now','localtime') WHERE id = ? AND status = 'pendente'",
@@ -957,9 +957,9 @@ async function checkAsaasPayments() {
               "UPDATE unlocks SET status = 'cancelado' WHERE id = ? AND status = 'pendente'",
               [u.id]
             );
-            console.log(`Pagamento não encontrado no Mercado Pago (Asaas antigo): unlock ${u.id} cancelado.`);
+            console.log(`Pagamento não encontrado no Mercado Pago (gateway legado): unlock ${u.id} cancelado.`);
           } else {
-            console.error(`Erro ao consultar pagamento Mercado Pago ${u.asaas_id}:`, e.message);
+            console.error(`Erro ao consultar pagamento Mercado Pago ${u.gateway_id}:`, e.message);
           }
         }
       }
@@ -967,17 +967,17 @@ async function checkAsaasPayments() {
   );
 }
 
-setInterval(checkAsaasPayments, 5000);
+setInterval(checkPendingPayments, 5000);
 
-async function checkAsaasRefills() {
+async function checkPendingRefills() {
   if (!process.env.MP_ACCESS_TOKEN) return;
   db.all(
-    "SELECT * FROM refills WHERE status = 'pendente' AND asaas_id IS NOT NULL AND asaas_id != ''",
+    "SELECT * FROM refills WHERE status = 'pendente' AND gateway_id IS NOT NULL AND gateway_id != ''",
     async (err, refills) => {
       if (err) return;
       for (const r of refills) {
         try {
-          const status = await mp.getPaymentStatus(r.asaas_id);
+          const status = await mp.getPaymentStatus(r.gateway_id);
           if (status === 'RECEIVED' || status === 'CONFIRMED') {
             db.run(
               "UPDATE refills SET status = 'pago', paid_at = datetime('now','localtime') WHERE id = ? AND status = 'pendente'",
@@ -1000,9 +1000,9 @@ async function checkAsaasRefills() {
               "UPDATE refills SET status = 'cancelado' WHERE id = ? AND status = 'pendente'",
               [r.id]
             );
-            console.log(`Pagamento não encontrado no Mercado Pago (Asaas antigo): refill ${r.id} cancelado.`);
+            console.log(`Pagamento não encontrado no Mercado Pago (gateway legado): refill ${r.id} cancelado.`);
           } else {
-            console.error(`Erro ao consultar recarga Mercado Pago ${r.asaas_id}:`, e.message);
+            console.error(`Erro ao consultar recarga Mercado Pago ${r.gateway_id}:`, e.message);
           }
         }
       }
@@ -1010,7 +1010,7 @@ async function checkAsaasRefills() {
   );
 }
 
-setInterval(checkAsaasRefills, 5000);
+setInterval(checkPendingRefills, 5000);
 
 async function notifyPaidRefills() {
   db.all(

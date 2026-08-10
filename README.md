@@ -1,6 +1,6 @@
 # Bot Bico
 
-Bot do Telegram de busca/comparação facial com pagamento PIX (Asaas), carteira de créditos, sistema de indicação e mescla de rostos.
+Bot do Telegram de busca/comparação facial com pagamento PIX (Mercado Pago), carteira de créditos, sistema de indicação e mescla de rostos.
 
 ## Estrutura
 
@@ -13,10 +13,10 @@ Bot do Telegram de busca/comparação facial com pagamento PIX (Asaas), carteira
 ├── stubs/                # Stub do @tensorflow/tfjs-node (usa backend WASM)
 └── projeto/
     ├── bot/index.js      # Lógica do bot (busca, carteira, indicação, mescla)
-    ├── painel/server.js  # Express: painel admin + API + webhook Asaas
+    ├── painel/server.js  # Express: painel admin + API + webhook de pagamento
     ├── deploy.js         # Entrada única p/ nuvem (webhook + painel + bot)
     ├── start-all.js      # Supervisor local (roda bot + painel)
-    ├── asaas.js, pix.js  # Integração PIX
+    ├── mp.js, pix.js     # Integração PIX (Mercado Pago)
     ├── face-service.js   # Reconhecimento facial (tfjs wasm + face-api)
     ├── mescla.js         # Fusão de rostos (morph)
     ├── referrals.js      # Sistema de indicação
@@ -61,15 +61,14 @@ Render roda o serviço direto do seu repositório GitHub. Free tier: 1 web servi
 |---|---|---|
 | `TELEGRAM_BOT_TOKEN` | sim | Token do @BotFather |
 | `TELEGRAM_WEBHOOK_URL` | nuvem | URL pública do webhook (vazio = polling local) |
-| `ASAAS_API_KEY` | sim | Chave da API Asaas |
-| `ASAAS_CUSTOMER_CPF` | sim | CPF/CNPJ fixo dos clientes Asaas |
-| `PIX_KEY` | sim | Chave PIX do recebedor |
-| `PIX_NAME` | sim | Nome do recebedor |
-| `PIX_CITY` | sim | Cidade do recebedor |
+| `MP_ACCESS_TOKEN` | sim | Access Token de produção do Mercado Pago (APP_USR-...) |
+| `MP_PAYER_EMAIL` | sim | E-mail do vendedor no Mercado Pago |
+| `MP_NOTIFICATION_URL` | não | URL de notificação de pagamento (webhook do MP) |
 | `PRICE_FULL_PHOTO` | não | Preço da foto completa (default 10) |
 | `REFERRAL_REWARD` | não | Recompensa por indicação (default 10) |
 | `WEBHOOK_TOKEN` | sim | Token do webhook de confirmação de pagamento |
 | `ADMIN_USER` / `ADMIN_PASS` | não | Acesso ao painel admin |
+| `DB_BACKUP_INTERVAL_MS` | não | Intervalo do backup do banco no R2 (default 5 min) |
 
 ## Limitações do plano grátis
 

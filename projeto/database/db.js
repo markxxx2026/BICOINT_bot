@@ -73,21 +73,20 @@ db.serialize(() => {
     face_id INTEGER NOT NULL,
     amount REAL NOT NULL,
     pix_code TEXT,
-    asaas_id TEXT,
+    gateway_id TEXT,
     platform TEXT,
     status TEXT DEFAULT 'pendente',
     notified INTEGER DEFAULT 0,
     created_at TEXT DEFAULT (datetime('now','localtime')),
     paid_at TEXT
   )`);
-  addColumn('unlocks', 'asaas_id TEXT');
   addColumn('unlocks', 'platform TEXT');
 
   db.run(`CREATE TABLE IF NOT EXISTS refills (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     chat_id INTEGER NOT NULL,
     amount REAL NOT NULL,
-    asaas_id TEXT,
+    gateway_id TEXT,
     status TEXT DEFAULT 'pendente',
     notified INTEGER DEFAULT 0,
     created_at TEXT DEFAULT (datetime('now','localtime')),
@@ -127,6 +126,12 @@ db.serialize(() => {
     key TEXT PRIMARY KEY,
     value TEXT
   )`);
+
+  // Migração de gateway de pagamento (legado Asaas -> Mercado Pago):
+  // renomeia a coluna asaas_id para gateway_id. Em banco novo (ou já migrado)
+  // o erro é ignorado.
+  db.run('ALTER TABLE unlocks RENAME COLUMN asaas_id TO gateway_id', () => {});
+  db.run('ALTER TABLE refills RENAME COLUMN asaas_id TO gateway_id', () => {});
 });
 
 module.exports = db;

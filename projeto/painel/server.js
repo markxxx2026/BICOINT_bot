@@ -7,7 +7,6 @@ const multer = require('multer');
 const db = require('../database/db');
 const faceService = require('../face-service');
 const blur = require('../blur');
-const referrals = require('../referrals');
 const storage = require('../storage');
 const importer = require('../importer');
 const excelImport = require('../excel-import');
@@ -828,43 +827,6 @@ app.post('/api/payments/confirm', (req, res) => {
     if (err) return res.status(404).json({ ok: false, error: err.message });
     res.json({ ok: true, alreadyPaid: result.alreadyPaid });
   });
-});
-
-app.post('/api/asaas/webhook', (req, res) => {
-  const token = req.headers['x-webhook-token'] || req.query.token || req.body.token;
-  if (token !== process.env.WEBHOOK_TOKEN) {
-    return res.status(401).json({ ok: false, error: 'Token inválido.' });
-  }
-  const event = req.body && req.body.event;
-  const payment = req.body && req.body.payment;
-  if (!payment || !payment.id) return res.status(400).json({ ok: false, error: 'payment id obrigatório.' });
-  if (event === 'PAYMENT_CONFIRMED' || event === 'PAYMENT_RECEIVED') {
-    db.get('SELECT id FROM unlocks WHERE asaas_id = ?', [payment.id], (err, unlock) => {
-      if (err || !unlock) {
-        db.get('SELECT id FROM refills WHERE asaas_id = ?', [payment.id], (err2, refill) => {
-          if (err2 || !refill) return res.json({ ok: true, found: false });
-          db.run(
-            "UPDATE refills SET status = 'pago', paid_at = datetime('now','localtime') WHERE id = ? AND status = 'pendente'",
-            [refill.id]
-          );
-          db.run(
-            `INSERT INTO balances (chat_id, credits, updated_at)
-             VALUES (?, ?, datetime('now','localtime'))
-             ON CONFLICT(chat_id) DO UPDATE SET
-               credits = credits + excluded.credits,
-               updated_at = datetime('now','localtime')`,
-            [refill.chat_id, payment.value || 0]
-          );
-          referrals.creditReferralForRefill(refill.chat_id);
-          res.json({ ok: true, found: true });
-        });
-        return;
-      }
-      confirmUnlock(unlock.id, () => res.json({ ok: true, found: true }));
-    });
-  } else {
-    res.json({ ok: true });
-  }
 });
 
 seedAdmin();

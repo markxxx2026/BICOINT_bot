@@ -3,7 +3,7 @@
    - registerReferral: registra que "referred" entrou pelo link de "referrer"
    - creditReferralForRefill: quando o indicado deposita (refill pago),
      credita R$ 10 na carteira do indicador e marca a indicação como paga.
-   Usado tanto pelo bot (polling) quanto pelo painel (webhook Asaas).
+   Usado tanto pelo bot (polling) quanto pelo painel (webhook de pagamento).
    ============================================================ */
 
 const db = require('./database/db');
