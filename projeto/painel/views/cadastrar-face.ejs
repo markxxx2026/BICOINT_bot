@@ -90,13 +90,27 @@
     </section>
 
     <section class="panel">
-      <h2>Faces cadastradas (<%= faces.length %>)</h2>
+      <div class="panel-head-row">
+        <h2>Faces cadastradas (<%= faces.length %>)</h2>
+        <% if (faces.length > 0) { %>
+          <label class="select-all"><input type="checkbox" id="selectAll"><span>Selecionar todos</span></label>
+        <% } %>
+      </div>
+      <div class="bulk-bar" id="bulkBar" hidden>
+        <span class="bulk-count" id="bulkCount">0 selecionados</span>
+        <button type="button" class="btn danger small" data-bulk="delete">🗑 Excluir selecionados</button>
+        <button type="button" class="btn warn small" data-bulk="antecedentes">⚠️ Com antecedentes</button>
+        <button type="button" class="btn primary small" data-bulk="vender" data-platform="uber">UBER: marcar vendido</button>
+        <button type="button" class="btn primary small" data-bulk="vender" data-platform="99">99: marcar vendido</button>
+      </div>
+      <form id="bulkForm" method="POST" action="/faces/bulk"></form>
       <% if (faces.length === 0) { %>
         <p class="empty">Nenhuma face cadastrada.</p>
       <% } else { %>
         <div class="face-grid">
           <% faces.forEach(f => { %>
           <div class="face-card">
+            <label class="face-check"><input type="checkbox" class="face-select" value="<%= f.id %>"><span></span></label>
             <img src="<%= f.url || ('/faces/' + f.photo) %>" alt="<%= f.name %>">
             <div class="face-info">
               <strong>#<%= f.id %></strong>
@@ -144,6 +158,90 @@
   </main>
   </div>
 </div>
+<script>
+(function () {
+  var checkboxes = Array.prototype.slice.call(document.querySelectorAll('.face-select'));
+  var selectAll = document.getElementById('selectAll');
+  var bulkBar = document.getElementById('bulkBar');
+  var bulkCount = document.getElementById('bulkCount');
+  var bulkForm = document.getElementById('bulkForm');
+  if (!bulkBar || !bulkForm || !checkboxes.length) return;
+
+  function selectedIds() {
+    return checkboxes.filter(function (c) { return c.checked; }).map(function (c) { return c.value; });
+  }
+
+  function update() {
+    var ids = selectedIds();
+    var n = ids.length;
+    bulkBar.hidden = n === 0;
+    if (bulkCount) bulkCount.textContent = n + ' selecionado' + (n === 1 ? '' : 's');
+    if (selectAll) {
+      selectAll.checked = n === checkboxes.length && n > 0;
+      selectAll.indeterminate = n > 0 && n < checkboxes.length;
+    }
+    checkboxes.forEach(function (c) {
+      var card = c.closest('.face-card');
+      if (card) card.classList.toggle('selected', c.checked);
+    });
+  }
+
+  checkboxes.forEach(function (c) {
+    c.addEventListener('change', update);
+  });
+
+  if (selectAll) {
+    selectAll.addEventListener('change', function () {
+      checkboxes.forEach(function (c) { c.checked = selectAll.checked; });
+      update();
+    });
+  }
+
+  bulkBar.addEventListener('click', function (e) {
+    var btn = e.target.closest('button[data-bulk]');
+    if (!btn) return;
+    var ids = selectedIds();
+    if (!ids.length) return;
+    var action = btn.getAttribute('data-bulk');
+    var msg;
+    if (action === 'delete') {
+      msg = 'Excluir ' + ids.length + ' face' + (ids.length === 1 ? '' : 's') + ' selecionada' + (ids.length === 1 ? '' : 's') + '? Essa ação não pode ser desfeita.';
+    } else if (action === 'antecedentes') {
+      msg = 'Marcar ' + ids.length + ' face' + (ids.length === 1 ? '' : 's') + ' como COM ANTECEDENTES e excluir da loja?';
+    } else {
+      msg = 'Marcar as ' + ids.length + ' faces selecionadas como VENDIDAS na plataforma ' + (btn.getAttribute('data-platform') === 'uber' ? 'UBER' : '99') + '?';
+    }
+    if (!confirm(msg)) return;
+
+    while (bulkForm.firstChild) bulkForm.removeChild(bulkForm.firstChild);
+    ids.forEach(function (id) {
+      var input = document.createElement('input');
+      input.type = 'hidden';
+      input.name = 'ids';
+      input.value = id;
+      bulkForm.appendChild(input);
+    });
+    var a = document.createElement('input');
+    a.type = 'hidden';
+    a.name = 'action';
+    a.value = action;
+    bulkForm.appendChild(a);
+    if (action === 'vender') {
+      var p = document.createElement('input');
+      p.type = 'hidden';
+      p.name = 'platform';
+      p.value = btn.getAttribute('data-platform');
+      bulkForm.appendChild(p);
+      var v = document.createElement('input');
+      v.type = 'hidden';
+      v.name = 'value';
+      v.value = '1';
+      bulkForm.appendChild(v);
+    }
+    bulkForm.submit();
+  });
+})();
+</script>
 <script src="/app.js"></script>
 </body>
 </html>

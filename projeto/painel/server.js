@@ -655,6 +655,66 @@ app.post('/faces/:id/vender', auth, (req, res) => {
   });
 });
 
+// Ações em massa na listagem de faces (exclusão, antecedentes e venda),
+// com a MESMA lógica das rotas individuais, para a seleção múltipla.
+app.post('/faces/bulk', auth, async (req, res) => {
+  let ids = req.body.ids;
+  if (!Array.isArray(ids)) ids = ids ? [ids] : [];
+  ids = ids.map(Number).filter((n) => Number.isInteger(n) && n > 0);
+  if (!ids.length) return res.status(400).send('Nenhuma face selecionada.');
+  const inClause = ids.join(',');
+
+  if (req.body.action === 'delete') {
+    db.all(`SELECT * FROM faces WHERE id IN (${inClause})`, async (err, faces) => {
+      if (err) return res.status(500).send(err.message);
+      try {
+        for (const f of faces) {
+          await storage.remove('photos/' + f.photo);
+          await blur.deleteBlurred(f.photo).catch(() => {});
+        }
+      } catch (e) { /* falha de storage não impede a exclusão local */ }
+      db.run(`DELETE FROM faces WHERE id IN (${inClause})`, (err2) => {
+        if (err2) return res.status(500).send(err2.message);
+        res.redirect('/cadastrar-face');
+      });
+    });
+    return;
+  }
+
+  if (req.body.action === 'antecedentes') {
+    db.run(`UPDATE faces SET antecedentes = 1 WHERE id IN (${inClause})`, (err) => {
+      if (err) return res.status(500).send(err.message);
+      res.redirect('/cadastrar-face');
+    });
+    return;
+  }
+
+  if (req.body.action === 'vender') {
+    const platform = req.body.platform;
+    const value = req.body.value === '0' ? 0 : 1;
+    if (platform !== 'uber' && platform !== '99') {
+      return res.status(400).send('Plataforma inválida.');
+    }
+    const col = platform === 'uber' ? 'sold_uber' : 'sold_99';
+    db.all(`SELECT * FROM faces WHERE id IN (${inClause})`, (err, faces) => {
+      if (err) return res.status(500).send(err.message);
+      const target = faces.filter((f) =>
+        platform === 'uber'
+          ? (f.platform === 'uber' || f.platform === 'uberx99' || !f.platform)
+          : (f.platform === '99' || f.platform === 'uberx99' || !f.platform)
+      ).map((f) => f.id);
+      if (!target.length) return res.redirect('/cadastrar-face');
+      db.run(`UPDATE faces SET ${col} = ? WHERE id IN (${target.join(',')})`, [value], (err2) => {
+        if (err2) return res.status(500).send(err2.message);
+        res.redirect('/cadastrar-face');
+      });
+    });
+    return;
+  }
+
+  res.status(400).send('Ação inválida.');
+});
+
 app.get('/faces/:id/editar', auth, (req, res) => {
   const id = Number(req.params.id);
   db.get('SELECT * FROM faces WHERE id = ?', [id], async (err, face) => {

@@ -745,3 +745,111 @@ body.dash-bg .layout { position: relative; z-index: 1; }
   table { font-size: 0.82rem; }
   th, td { padding: 10px 6px; }
 }
+
+/* ============ Seleção múltipla (Cadastrar Face) ============ */
+
+.face-card { position: relative; }
+.face-card.selected {
+  border-color: rgba(52, 211, 153, 0.6);
+  box-shadow: 0 0 0 1px rgba(52, 211, 153, 0.6);
+}
+
+.face-check {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.55);
+  cursor: pointer;
+}
+
+.face-check input {
+  position: absolute;
+  opacity: 0;
+  cursor: pointer;
+  margin: 0;
+}
+
+.face-check span {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.75);
+  border-radius: 4px;
+  background: transparent;
+  display: inline-block;
+  box-sizing: border-box;
+}
+
+.face-check input:checked + span {
+  background: var(--primary);
+  border-color: var(--primary);
+  position: relative;
+}
+
+.face-check input:checked + span::after {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 1px;
+  width: 4px;
+  height: 8px;
+  border: solid #04100b;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+.panel-head-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.panel-head-row h2 { margin: 0; }
+
+.select-all {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.82rem;
+  color: var(--text-dim);
+  cursor: pointer;
+  user-select: none;
+  font-weight: 600;
+}
+
+.select-all input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--primary);
+  cursor: pointer;
+}
+
+.bulk-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 10px 12px;
+  margin-bottom: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: linear-gradient(165deg, rgba(12, 20, 16, 0.85), rgba(7, 11, 9, 0.9));
+}
+
+.bulk-bar[hidden] { display: none; }
+
+.bulk-count {
+  font-size: 0.85rem;
+  color: var(--text);
+  font-weight: 700;
+  margin-right: 4px;
+}
