@@ -341,7 +341,7 @@ async function startRefillPayment(chatId, value) {
       }
     );
   } catch (err2) {
-    console.error('Erro ao gerar recarga:', err2.message);
+    console.error('Erro ao gerar recarga:', err2 && err2.statusCode, err2 && err2.message, err2 && err2.details ? JSON.stringify(err2.details).slice(0, 600) : '');
     bot.sendMessage(chatId, 'Erro ao gerar o QR Code. Tente novamente.');
   }
 }
@@ -885,7 +885,7 @@ bot.on('callback_query', async (query) => {
       try {
         await generatePixUnlock(chatId, face, platform);
       } catch (err2) {
-        console.error('Erro ao gerar unlock:', err2.message);
+        console.error('Erro ao gerar unlock:', err2 && err2.statusCode, err2 && err2.message, err2 && err2.details ? JSON.stringify(err2.details).slice(0, 600) : '');
         bot.sendMessage(chatId, 'Erro ao gerar o pagamento. Tente novamente.');
       }
   });

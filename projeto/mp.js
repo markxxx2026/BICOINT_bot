@@ -44,6 +44,8 @@ function request(method, path, body, extraHeaders) {
             const detail = json && json.message
               ? json.message
               : (json && json.error) || raw || `HTTP ${res.statusCode}`;
+            console.error(`[mp] ${method} ${path} -> ${res.statusCode}: ${detail}`);
+            if (json) console.error('[mp] detalhes:', JSON.stringify(json).slice(0, 600));
             const err = new Error(detail);
             err.statusCode = res.statusCode;
             err.details = json;
@@ -89,11 +91,11 @@ function transactionDataFrom(payment) {
 
 async function createPixPayment({ chatId, value, externalReference, description }) {
   const body = {
-    transaction_amount: Number(value),
+    transaction_amount: Number(Number(value).toFixed(2)),
     description: String(description || 'Compra').slice(0, 256),
     payment_method_id: 'pix',
     external_reference: String(externalReference || '').slice(0, 256),
-    payer: { email: String(process.env.MP_PAYER_EMAIL || '') }
+    payer: { email: String(process.env.MP_PAYER_EMAIL || '').trim() }
   };
   if (process.env.MP_NOTIFICATION_URL) {
     body.notification_url = process.env.MP_NOTIFICATION_URL;
