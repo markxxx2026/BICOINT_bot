@@ -69,7 +69,10 @@ Render roda o serviço direto do seu repositório GitHub. Free tier: 1 web servi
 | `WEBHOOK_TOKEN` | sim | Token do webhook de confirmação de pagamento |
 | `ADMIN_USER` / `ADMIN_PASS` | não | Acesso ao painel admin |
 
-O armazenamento é **local** (fotos em `projeto/painel/faces` e banco em `projeto/database/painel.db`), sem sincronização externa (R2/S3).
+### Armazenamento
+
+- **Mídia (fotos)**: com `R2_*` configurado, as fotos vão para o bucket R2 e são servidas por URL assinada (o Telegram/navegador baixam direto do bucket, sem consumir a banda da Render). Sem R2, ficam locais em `projeto/painel/faces`.
+- **Banco (`painel.db`)**: **sempre local** no disco da instância — nenhum backup, push ou pull para o R2/S3. O arquivo é mantido no repositório para persistir entre deploys.
 
 ## Limitações do plano grátis
 
