@@ -113,7 +113,8 @@ const FILTER_GROUPS = {
     { id: 'female', label: '👱 Mulheres + R$', cb: 'gender_female' }
   ],
   vehicle: [
-    { id: 'both', label: '🚗🏍️ Carro e Moto', cb: 'vehicle_car_moto' }
+    { id: 'car', label: '🚗 Carro', cb: 'vehicle_car' },
+    { id: 'moto', label: '🏍️ Moto', cb: 'vehicle_moto' }
   ],
   app: [
     { id: '99', label: '99', cb: 'app_99' },
@@ -190,7 +191,7 @@ function validateSelections(state) {
 function menuStateToFilters(s) {
   return {
     gender: s.gender === 'male' ? 'homem' : s.gender === 'female' ? 'mulher' : null,
-    vehicle: s.vehicle === 'both' ? 'carro,moto' : null,
+    vehicle: s.vehicle === 'car' ? 'carro' : s.vehicle === 'moto' ? 'moto' : null,
     platform: s.app === 'uber' ? 'uber' : s.app === '99' ? '99' : null,
     randomName: s.name === 'random',
     firstName: s.firstName,
