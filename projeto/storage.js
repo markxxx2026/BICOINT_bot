@@ -10,6 +10,7 @@
 
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
 
 const FACES_DIR = path.join(__dirname, 'painel', 'faces');
 const BLURRED_DIR = path.join(__dirname, 'painel', 'blurred');
@@ -281,6 +282,8 @@ async function list(prefix = 'photos/') {
 /* ==================== Backup do banco (metadados) ==================== */
 
 let lastDbSig = { mtimeMs: 0, size: -1 };
+let lastDbHash = '';
+let syncingDb = false;
 
 function dbSignature() {
   try {
@@ -291,21 +294,49 @@ function dbSignature() {
   }
 }
 
+// Cópia consistente do painel.db para a memória (evita ler um arquivo
+// parcialmente escrito pelo SQLite durante o snapshot).
+function readDbSnapshot() {
+  fs.mkdirSync(TMP_DIR, { recursive: true });
+  const tmp = path.join(TMP_DIR, `painel-snapshot-${process.pid}.db`);
+  fs.copyFileSync(DB_PATH, tmp);
+  const buf = fs.readFileSync(tmp);
+  try { fs.unlinkSync(tmp); } catch (e) { /* best effort */ }
+  return buf;
+}
+
+function dbContentHash(buf) {
+  return crypto.createHash('sha1').update(buf).digest('hex');
+}
+
 // Snapshot consistente do painel.db e envio para o armazenamento.
+// Dirty checking: só envia se o CONTEÚDO mudou desde o último upload.
+// Fast-path por mtime/tamanho e confirmação por hash SHA-1 (ignora
+// gravações que não alteraram os dados de fato).
 async function uploadDbSnapshot() {
-  if (!usingRemote) return null;
+  if (!usingRemote || syncingDb) return null;
   try {
     const sig = dbSignature();
     if (!sig) return null;
-    fs.mkdirSync(TMP_DIR, { recursive: true });
-    const tmp = path.join(TMP_DIR, `painel-snapshot-${Date.now()}.db`);
-    fs.copyFileSync(DB_PATH, tmp);
-    const buf = fs.readFileSync(tmp);
-    fs.unlinkSync(tmp);
-    await put('data/painel.db', buf);
-    lastDbSig = sig;
-    console.log('[storage] Banco de dados sincronizado para o armazenamento persistente.');
-    return sig;
+    if (sig.mtimeMs === lastDbSig.mtimeMs && sig.size === lastDbSig.size) {
+      return null; // nada mudou desde o último envio
+    }
+    const buf = readDbSnapshot();
+    const hash = dbContentHash(buf);
+    if (hash === lastDbHash) {
+      lastDbSig = sig; // mtime mudou sem mudar o conteúdo — não sobe
+      return null;
+    }
+    syncingDb = true;
+    try {
+      await put('data/painel.db', buf);
+      lastDbSig = sig;
+      lastDbHash = hash;
+      console.log('[storage] Banco de dados sincronizado para o armazenamento persistente.');
+      return sig;
+    } finally {
+      syncingDb = false;
+    }
   } catch (e) {
     console.error('[storage] upload do banco falhou:', e.message);
     return null;
@@ -331,6 +362,7 @@ async function restoreDb() {
     fs.writeFileSync(DB_PATH, buf);
     const sig = dbSignature();
     lastDbSig = sig;
+    lastDbHash = dbContentHash(buf);
     console.log('[storage] Banco de dados restaurado do armazenamento persistente.');
     return true;
   } catch (e) {
@@ -364,21 +396,21 @@ async function syncLocalPhotosToRemote() {
   }
 }
 
-// Loop que envia o banco a cada alteração (por assinatura de arquivo).
+// Loop de backup do banco. O dirty checking (só envia se houve alteração
+// real no conteúdo) é feito dentro de uploadDbSnapshot.
+// Intervalo padrão: 5 minutos; configure com DB_BACKUP_INTERVAL_MS (ms).
 function startDbBackup(intervalMs) {
   if (!usingRemote) return;
-  const ms = intervalMs || 5000;
+  const ms = intervalMs || Number(process.env.DB_BACKUP_INTERVAL_MS) || 5 * 60 * 1000;
   setInterval(async () => {
     try {
-      const sig = dbSignature();
-      if (!sig) return;
-      if (sig.mtimeMs !== lastDbSig.mtimeMs || sig.size !== lastDbSig.size) {
-        await uploadDbSnapshot();
-      }
+      await uploadDbSnapshot();
     } catch (e) { /* ignora */ }
   }, ms);
   process.on('SIGTERM', () => { uploadDbSnapshot().catch(() => {}); });
   process.on('SIGINT', () => { uploadDbSnapshot().catch(() => {}); });
+  const label = ms >= 60000 ? `${Math.round(ms / 60000)}min` : `${Math.round(ms / 1000)}s`;
+  console.log(`[storage] Backup do banco a cada ${label} (somente com alteração).`);
 }
 
 // Rotina de inicialização usada pelas entradas (deploy.js / start-all.js).
