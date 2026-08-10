@@ -90,8 +90,9 @@ async function createPixPayment({ chatId, value, externalReference, description 
     external_reference: String(externalReference || '').slice(0, 256),
     payer: { email: String(process.env.MP_PAYER_EMAIL || '') }
   };
-pagador:{ e-mail;Corda(processo.ambiente.E-MAIL DO PAGADOR DEPARTAMENTO || '') }    body.notification_url = process.env.MP_NOTIFICATION_URL;
-  }
+payer: { 
+    email: String(process.env.PAYER_EMAIL || '') 
+}
   const payment = await request('POST', '/v1/payments', body, { 'X-Idempotency-Key': String(externalReference || `PIX_${Date.now()}`) });
   const td = transactionDataFrom(payment);
   if (td && td.qr_code) qrCache.set(String(payment.id), td);
