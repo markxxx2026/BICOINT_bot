@@ -4,7 +4,9 @@
    - Fotos (photos/ e photos/blurred/): enviadas para o R2/S3 e
      servidas por URL assinada (presigned) — o Telegram e o
      navegador baixam direto do bucket, sem consumir a banda da
-     Render. Cache local em faces/ e blurred/ como fallback.
+     Render. Com R2 ativo, a Render NÃO persiste fotos no disco
+     (nada fica gravado no filesystem além dos temporários de
+     upload, que são apagados).
    - Banco (painel.db): SEMPRE local, no disco da instância.
      NENHUM backup, push ou pull do banco para o R2/S3.
      Chaves `data/` são forçadas a ficar locais (guarda rígida) e
@@ -132,22 +134,20 @@ function isRemote() {
   return usingRemote;
 }
 
+// Mídia com R2 configurado: grava SOMENTE no bucket (a Render não persiste
+// fotos no disco). Sem R2 (dev), usa o disco local normalmente.
 async function get(key) {
-  const lp = localPathFor(key);
-  try {
-    if (fs.existsSync(lp)) return fs.readFileSync(lp);
-  } catch (e) { /* ignora */ }
-
-  if (!usingRemote || !isRemoteAllowed(key)) return null;
+  if (!usingRemote || !isRemoteAllowed(key)) {
+    const lp = localPathFor(key);
+    try {
+      if (fs.existsSync(lp)) return fs.readFileSync(lp);
+    } catch (e) { /* ignora */ }
+    return null;
+  }
   try {
     const { GetObjectCommand } = require('@aws-sdk/client-s3');
     const out = await client.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
-    const buf = Buffer.from(await out.Body.transformToByteArray());
-    try {
-      fs.mkdirSync(path.dirname(lp), { recursive: true });
-      fs.writeFileSync(lp, buf);
-    } catch (e) { /* cache local opcional */ }
-    return buf;
+    return Buffer.from(await out.Body.transformToByteArray());
   } catch (e) {
     if (e && (e.name === 'NoSuchKey' || e.name === 'NotFound')) return null;
     console.error(`[storage] get falhou "${key}":`, e.message);
@@ -159,14 +159,18 @@ async function put(key, buf) {
   if (!Buffer.isBuffer(buf)) {
     try { buf = Buffer.from(buf); } catch (e) { return false; }
   }
-  const lp = localPathFor(key);
-  try {
-    fs.mkdirSync(path.dirname(lp), { recursive: true });
-    fs.writeFileSync(lp, buf);
-  } catch (e) {
-    console.error(`[storage] cache local falhou "${key}":`, e.message);
+  if (!usingRemote || !isRemoteAllowed(key)) {
+    // Sem R2 (dev) ou chave não remota: grava apenas no disco local.
+    const lp = localPathFor(key);
+    try {
+      fs.mkdirSync(path.dirname(lp), { recursive: true });
+      fs.writeFileSync(lp, buf);
+      return true;
+    } catch (e) {
+      console.error(`[storage] gravação local falhou "${key}":`, e.message);
+      return false;
+    }
   }
-  if (!usingRemote || !isRemoteAllowed(key)) return true;
   try {
     const { PutObjectCommand } = require('@aws-sdk/client-s3');
     await client.send(new PutObjectCommand({
