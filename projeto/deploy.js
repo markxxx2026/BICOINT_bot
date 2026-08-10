@@ -31,6 +31,20 @@ async function main() {
     res.sendStatus(200);
   });
 
+  // Webhook do Mercado Pago: o MP faz POST aqui quando o PIX é pago.
+  // A confirmação do pagamento já é feita pelo polling (a cada 5s); aqui
+  // apenas reconhecemos a notificação (200) para o MP não reenviar.
+  app.post('/webhook/mp', (req, res) => {
+    const data = req.body || {};
+    console.log('[mp] notificação recebida:', JSON.stringify({
+      type: data.type,
+      action: data.action,
+      id: data.id,
+      payment_id: data.data && data.data.id
+    }).slice(0, 300));
+    res.sendStatus(200);
+  });
+
   async function registerWebhook() {
     console.log('Registrando webhook do Telegram ->', WEBHOOK_URL);
     for (let attempt = 1; attempt <= 5; attempt++) {

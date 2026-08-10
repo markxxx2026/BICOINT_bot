@@ -89,6 +89,18 @@ function transactionDataFrom(payment) {
   );
 }
 
+// URL de notificação do Mercado Pago — EXIGIDA pela API ("Ação obrigatória"
+// na seção Pagamentos). Sem o campo notification_url o MP recusa a criação
+// do PIX. Preferência: MP_NOTIFICATION_URL explícita; senão, deriva da base
+// do TELEGRAM_WEBHOOK_URL (ex.: https://app.onrender.com/webhook/mp).
+function notificationUrlFor() {
+  const explicit = String(process.env.MP_NOTIFICATION_URL || '').trim();
+  if (explicit) return explicit;
+  const base = String(process.env.TELEGRAM_WEBHOOK_URL || '').trim().replace(/\/+$/, '');
+  const origin = base.replace(/\/webhook\/[^/]*$/, '');
+  return origin ? origin + '/webhook/mp' : '';
+}
+
 async function createPixPayment({ chatId, value, externalReference, description }) {
   const body = {
     transaction_amount: Number(Number(value).toFixed(2)),
@@ -97,8 +109,11 @@ async function createPixPayment({ chatId, value, externalReference, description 
     external_reference: String(externalReference || '').slice(0, 256),
     payer: { email: String(process.env.MP_PAYER_EMAIL || '').trim() }
   };
-  if (process.env.MP_NOTIFICATION_URL) {
-    body.notification_url = process.env.MP_NOTIFICATION_URL;
+  const notificationUrl = notificationUrlFor();
+  if (notificationUrl) {
+    body.notification_url = notificationUrl;
+  } else {
+    console.warn('[mp] ATENCAO: notification_url ausente (defina MP_NOTIFICATION_URL ou TELEGRAM_WEBHOOK_URL) — o Mercado Pago pode recusar o PIX.');
   }
   const payment = await request('POST', '/v1/payments', body, { 'X-Idempotency-Key': String(externalReference || `PIX_${Date.now()}`) });
   const td = transactionDataFrom(payment);
@@ -128,7 +143,8 @@ async function getPaymentStatus(paymentId) {
 module.exports = { createPixPayment, getPixQrCode, getPaymentStatus, normalizeStatus, request };
 
 if (getAccessToken()) {
-  console.log(`[mp] Mercado Pago PIX ativo (token=SIM, email=${process.env.MP_PAYER_EMAIL ? 'SIM' : 'NÃO'}).`);
+  console.log(`[mp] Mercado Pago PIX ativo (token=SIM, email=${process.env.MP_PAYER_EMAIL ? 'SIM' : 'NÃO'}, notification_url=${notificationUrlFor() || 'NENHUMA'}).
+[mp] IMPORTANTE: a API exige notification_url — sem ela o PIX pode ser recusado (Ação obrigatória).`);
 } else {
   console.log('[mp] ATENCAO: MP_ACCESS_TOKEN ausente — pagamento PIX desativado.');
 }
