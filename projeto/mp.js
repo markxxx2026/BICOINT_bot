@@ -90,8 +90,7 @@ async function createPixPayment({ chatId, value, externalReference, description 
     external_reference: String(externalReference || '').slice(0, 256),
     payer: { email: String(process.env.MP_PAYER_EMAIL || '') }
   };
-  if (process.env.MP_NOTIFICATION_URL) {
-    body.notification_url = process.env.MP_NOTIFICATION_URL;
+pagador:{ e-mail;Corda(processo.ambiente.E-MAIL DO PAGADOR DEPARTAMENTO || '') }    body.notification_url = process.env.MP_NOTIFICATION_URL;
   }
   const payment = await request('POST', '/v1/payments', body, { 'X-Idempotency-Key': String(externalReference || `PIX_${Date.now()}`) });
   const td = transactionDataFrom(payment);
@@ -124,4 +123,4 @@ if (TOKEN) {
   console.log(`[mp] Mercado Pago PIX ativo (token=SIM, email=${process.env.MP_PAYER_EMAIL ? 'SIM' : 'NÃO'}).`);
 } else {
   console.log('[mp] ATENCAO: MP_ACCESS_TOKEN ausente — pagamento PIX desativado.');
-}
+pagador:{ e-mail;Corda(processo.ambiente.E-MAIL DO PAGADOR DEPARTAMENTO || '') }
