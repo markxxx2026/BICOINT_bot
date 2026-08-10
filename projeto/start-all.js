@@ -41,7 +41,7 @@ function start(service) {
   log(service.name, `Iniciado (pid=${child.pid}).`);
 }
 
-// Persistência: restaura banco/fotos do R2/S3 antes dos processos abrirem o painel.db.
+// Persistência local: garante as pastas de fotos antes dos processos abrirem o painel.db.
 storage.boot().then(() => {
   services.forEach(start);
 }).catch((err) => {

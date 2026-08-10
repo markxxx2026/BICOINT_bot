@@ -13,8 +13,8 @@ const storage = require('../storage');
 
 storage.init().catch((e) => console.error('Erro ao iniciar storage:', e.message));
 
-// Envia a foto pela URL assinada (Telegram baixa direto do R2, sem passar
-// pela Render). Se a URL falhar ou não houver remoto, baixa o buffer e envia.
+// Envia a foto do armazenamento local (buffer). Se um dia houver remoto,
+// tenta a URL assinada primeiro e cai no buffer se a URL falhar.
 async function sendPhotoSmart(chatId, key, caption, extra) {
   const opts = { caption, ...(extra || {}) };
   const url = await storage.presignedUrl(key, 1800);

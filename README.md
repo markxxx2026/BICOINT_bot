@@ -68,7 +68,8 @@ Render roda o serviço direto do seu repositório GitHub. Free tier: 1 web servi
 | `REFERRAL_REWARD` | não | Recompensa por indicação (default 10) |
 | `WEBHOOK_TOKEN` | sim | Token do webhook de confirmação de pagamento |
 | `ADMIN_USER` / `ADMIN_PASS` | não | Acesso ao painel admin |
-| `DB_BACKUP_INTERVAL_MS` | não | Intervalo do backup do banco no R2 (default 5 min) |
+
+O armazenamento é **local** (fotos em `projeto/painel/faces` e banco em `projeto/database/painel.db`), sem sincronização externa (R2/S3).
 
 ## Limitações do plano grátis
 

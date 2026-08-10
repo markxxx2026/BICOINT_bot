@@ -36,11 +36,3 @@ services:
         value: admin
       - key: ADMIN_PASS
         sync: false
-      - key: R2_ACCOUNT_ID
-        sync: false
-      - key: R2_ACCESS_KEY_ID
-        sync: false
-      - key: R2_SECRET_ACCESS_KEY
-        sync: false
-      - key: R2_BUCKET
-        sync: false

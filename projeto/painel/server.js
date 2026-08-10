@@ -37,7 +37,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 // (O diretório uploads é a pasta do importador automático e NÃO fica exposto
 // publicamente — fotos originais aguardando importação não devem ser acessíveis.)
 
-// Fotos servidas do armazenamento persistente (R2/S3 com cache local).
+// Fotos servidas do armazenamento local (disco).
 async function serveStored(req, res, keyPrefix) {
   const file = path.basename(req.params.file || '');
   if (!file || file === '.' || file === '..') return res.status(400).send('Nome inválido.');
@@ -354,9 +354,8 @@ function sanitizeRelPath(rel) {
   return parts.join(path.sep);
 }
 
-// Adiciona uma URL pública (presigned) a cada foto — o navegador baixa
-// direto do R2, sem o tráfego passar pela Render. Sem remoto ativo (ou se a
-// assinatura falhar), mantém o proxy local /faces/ como fallback.
+// Adiciona uma URL pública a cada foto. Sem remoto ativo, mantém o proxy
+// local /faces/ como fallback.
 async function withPhotoUrls(faces) {
   return Promise.all(
     faces.map(async (f) => {
@@ -580,7 +579,7 @@ app.post('/cadastrar-face', auth, faceUpload.single('foto'), async (req, res) =>
       const nextId = row.maxId + 1;
       const finalName = `${nextId}.jpg`;
 
-      // Envia a foto para o armazenamento persistente (R2/S3) + cache local.
+      // Grava a foto no armazenamento local.
       storage.put('photos/' + finalName, buffer)
         .then(() => {
           blur.cacheBlurred(finalName).catch(() => {});
@@ -746,7 +745,7 @@ app.post('/faces/:id/editar', auth, faceUpload.single('foto'), (req, res) => {
           fs.unlinkSync(filePath);
           return render('Nenhum rosto detectado na nova foto. A foto original foi mantida.', null);
         }
-        // Substitui a foto no armazenamento persistente (R2/S3) + cache local.
+        // Substitui a foto no armazenamento local.
         await storage.put('photos/' + face.photo, buffer);
         blur.cacheBlurred(face.photo).catch(() => {});
         try { fs.unlinkSync(filePath); } catch (e2) { /* já removido */ }

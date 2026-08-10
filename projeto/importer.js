@@ -10,7 +10,7 @@
      foto.jpg + foto.json) com campos title, description,
      category, price, tags, gender, vehicle, platform
    - Pasta = categoria (ex.: uploads/Praia/x.jpg -> categoria "Praia")
-   - Envia a foto para o armazenamento persistente (R2/S3) ANTES
+   - Grava a foto no armazenamento local (disco) ANTES
      de gravar no banco; só apaga a original depois de tudo ok
    - Fila + concorrência limitada + retry com backoff
    - Logs em logs/importer.log e status em tempo real
@@ -243,7 +243,7 @@ async function importFile(filePath) {
   let desc = description;
   if (tags.length) desc = desc ? desc + '\n\nTags: ' + tags.join(', ') : 'Tags: ' + tags.join(', ');
 
-  // Seção crítica serializada: próximo ID + gravação R2 + INSERT + blur.
+  // Seção crítica serializada: próximo ID + gravação local + INSERT + blur.
   await enqueueIdle(async () => {
     try {
       const row = await dbGet('SELECT COALESCE(MAX(id), 1000) AS maxId FROM faces');

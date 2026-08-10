@@ -10,8 +10,8 @@ require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 const storage = require('./storage');
 
 async function main() {
-  // Persistência: restaura o banco e fotos do R2/S3 ANTES de qualquer
-  // módulo abrir o painel.db. Nada se perde em restart/deploy.
+  // Persistência local: garante as pastas de fotos antes de qualquer
+  // módulo abrir o painel.db. Sem sincronização externa (R2/S3).
   await storage.boot();
 
   const app = require('./painel/server');
