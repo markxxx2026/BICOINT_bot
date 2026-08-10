@@ -239,16 +239,26 @@
     inputFolder.value = '';
   });
 
-  function uploadFiles(fileList) {
-    var files = Array.prototype.slice.call(fileList);
-    var relpaths = files.map(function (f) { return f.webkitRelativePath || f.name; });
+  function mimeFor(name, type) {
+    if (type) return type;
+    var ext = (name || '').split('.').pop().toLowerCase();
+    if (ext === 'png') return 'image/png';
+    if (ext === 'webp') return 'image/webp';
+    return 'image/jpeg';
+  }
+
+  function buildKey(rel) {
+    return 'staging/uploads/' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8) + '/' + String(rel).replace(/\\/g, '/').replace(/^\/+/, '');
+  }
+
+  // Fallback (sem R2 no servidor): mantém o envio multipart antigo.
+  function fallbackLegacy(files, relpaths, title, description) {
     var fd = new FormData();
     files.forEach(function (f) { fd.append('files', f); });
     fd.append('relpaths', JSON.stringify(relpaths));
-    fd.append('title', document.getElementById('title').value);
-    fd.append('description', document.getElementById('description').value);
-
-    uploadLog.textContent = '⬆️ Enviando ' + files.length + ' arquivo(s)...';
+    fd.append('title', title);
+    fd.append('description', description);
+    uploadLog.textContent = '⬆️ Enviando via servidor (upload direto indisponível)...';
     fetch('/api/importer/upload', { method: 'POST', body: fd })
       .then(function (r) { return r.json(); })
       .then(function (res) {
@@ -263,6 +273,88 @@
       .catch(function () {
         uploadLog.textContent = '❌ Falha ao enviar os arquivos.';
       });
+  }
+
+  function directUpload(files, relpaths, title, description) {
+    var done = 0, failed = 0, queuedKeys = [], queuedRels = [];
+    uploadLog.textContent = '⬆️ Enviando ' + files.length + ' arquivo(s) direto ao R2...';
+    function next(i) {
+      if (i >= files.length) { finish(); return; }
+      var f = files[i];
+      var rel = relpaths[i];
+      var ct = mimeFor(f.name, f.type);
+      fetch('/api/get-upload-url', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: buildKey(rel), contentType: ct })
+      })
+        .then(function (r) { return r.json(); })
+        .then(function (res) {
+          if (!res.ok || !res.url) { failed++; next(i + 1); return; }
+          return fetch(res.url, {
+            method: 'PUT',
+            headers: { 'Content-Type': ct },
+            body: f
+          })
+            .then(function (ur) {
+              if (ur.ok) { done++; queuedKeys.push(res.key); queuedRels.push(rel); }
+              else failed++;
+            })
+            .catch(function () { failed++; })
+            .then(function () { next(i + 1); });
+        })
+        .catch(function () { failed++; next(i + 1); });
+    }
+    function finish() {
+      if (!queuedKeys.length) {
+        if (failed > 0) {
+          // Nenhum PUT direto funcionou (ex.: CORS do bucket ainda não liberado).
+          // Cai para o envio via servidor para não bloquear a importação.
+          uploadLog.textContent = '⚠️ Upload direto falhou (' + failed + '). Tentando via servidor...';
+          fallbackLegacy(files, relpaths, title, description);
+        } else {
+          uploadLog.textContent = '❌ Nenhum arquivo enviado ao armazenamento. Verifique a configuração do R2.';
+        }
+        return;
+      }
+      uploadLog.textContent = '⬆️ ' + done + ' arquivo(s) enviado(s) ao R2. Confirmando importação...';
+      fetch('/api/importer/complete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ keys: queuedKeys, relpaths: queuedRels, title: title, description: description })
+      })
+        .then(function (r) { return r.json(); })
+        .then(function (res) {
+          uploadLog.textContent = res.ok
+            ? '✅ ' + res.queued + ' arquivo(s) confirmado(s). Importando...'
+            : '❌ ' + (res.error || 'Erro ao confirmar a importação.');
+        })
+        .catch(function () {
+          uploadLog.textContent = '❌ Falha ao confirmar a importação.';
+        });
+    }
+    next(0);
+  }
+
+  function uploadFiles(fileList) {
+    var files = Array.prototype.slice.call(fileList);
+    var relpaths = files.map(function (f) { return f.webkitRelativePath || f.name; });
+    var title = document.getElementById('title').value;
+    var description = document.getElementById('description').value;
+
+    if (!files.length) return;
+    // Pré-checagem: se o R2 não está ativo no servidor, usa o fluxo antigo.
+    fetch('/api/get-upload-url', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: buildKey(relpaths[0]), contentType: mimeFor(files[0].name, files[0].type) })
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (res) {
+        if (res.ok && res.url) directUpload(files, relpaths, title, description);
+        else fallbackLegacy(files, relpaths, title, description);
+      })
+      .catch(function () { fallbackLegacy(files, relpaths, title, description); });
   }
 
   function render(status) {

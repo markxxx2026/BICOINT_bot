@@ -230,6 +230,69 @@ async function presignedUrl(key, expiresIn = 3600) {
   }
 }
 
+// URL assinada de UPLOAD (presigned PUT) — o navegador envia o arquivo
+// DIRETO para o bucket, sem o byte passar pelo Express/Render. O bucket
+// precisa ter regra de CORS liberando PUT para o domínio do painel.
+async function presignedUploadUrl(key, contentType, expiresIn = 600) {
+  if (!usingRemote || !isRemoteAllowed(key)) return null;
+  try {
+    const { PutObjectCommand } = require('@aws-sdk/client-s3');
+    const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
+    return await getSignedUrl(client, new PutObjectCommand({
+      Bucket: bucket,
+      Key: key,
+      ContentType: contentType || contentTypeFor(key)
+    }), { expiresIn });
+  } catch (e) {
+    console.error(`[storage] presigned upload falhou "${key}":`, e.message);
+    return null;
+  }
+}
+
+// Cópia servidor-a-servidor dentro do bucket (CopyObject). Os bytes NÃO
+// passam pela Render — o Cloudflare move o objeto internamente. Usado para
+// "promover" um arquivo de staging para o local final sem egress do Render.
+// Retorna false se não houver remoto ou se a cópia falhar (quem chama cai
+// no fallback get+put).
+async function copyObject(srcKey, destKey) {
+  if (!usingRemote || !isRemoteAllowed(srcKey) || !isRemoteAllowed(destKey)) return false;
+  try {
+    const { CopyObjectCommand } = require('@aws-sdk/client-s3');
+    await client.send(new CopyObjectCommand({
+      Bucket: bucket,
+      Key: destKey,
+      CopySource: `${bucket}/${srcKey}`,
+      MetadataDirective: 'REPLACE',
+      ContentType: contentTypeFor(destKey)
+    }));
+    return true;
+  } catch (e) {
+    console.error(`[storage] copy falhou "${srcKey}" -> "${destKey}":`, e.message);
+    return false;
+  }
+}
+
+// Remove objetos de staging órfãos (upload iniciado e nunca confirmado).
+async function purgeStaging(maxAgeMs = 24 * 3600 * 1000) {
+  if (!usingRemote) return;
+  try {
+    const { ListObjectsV2Command } = require('@aws-sdk/client-s3');
+    const out = await client.send(new ListObjectsV2Command({ Bucket: bucket, Prefix: 'staging/uploads/' }));
+    const now = Date.now();
+    let n = 0;
+    for (const c of out.Contents || []) {
+      if (!c.Key || !c.LastModified) continue;
+      if (now - c.LastModified.getTime() > maxAgeMs) {
+        await remove(c.Key);
+        n++;
+      }
+    }
+    if (n > 0) console.log(`[storage] ${n} staging(s) órfã(s) removida(s) (>24h).`);
+  } catch (e) {
+    console.error('[storage] purgeStaging falhou:', e.message);
+  }
+}
+
 async function list(prefix = 'photos/') {
   if (!usingRemote) {
     const dir = prefix === 'photos/blurred/' ? BLURRED_DIR : FACES_DIR;
@@ -304,6 +367,9 @@ module.exports = {
   exists,
   list,
   presignedUrl,
+  presignedUploadUrl,
+  copyObject,
+  purgeStaging,
   syncLocalPhotosToRemote,
   FACES_DIR,
   BLURRED_DIR

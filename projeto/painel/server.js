@@ -350,6 +350,61 @@ function sanitizeRelPath(rel) {
   return parts.join(path.sep);
 }
 
+// Chave de staging usada no upload DIRETO ao R2 (presigned PUT). O navegador
+// gera a chave; aqui validamos que ela está sob o prefixo esperado, sem "..",
+// com segmentos razoáveis e extensão de imagem — nunca confiamos no cliente.
+const STAGING_PREFIX = 'staging/uploads/';
+function sanitizeUploadKey(raw) {
+  const s = String(raw || '').replace(/\\/g, '/');
+  if (!s.startsWith(STAGING_PREFIX)) return null;
+  const parts = s.split('/').filter((p) => p && p !== '.' && p !== '..');
+  if (parts.length < 3) return null;
+  if (parts.some((p) => p.length > 120)) return null;
+  const filename = parts[parts.length - 1];
+  if (!importer.IMAGE_RE.test(filename)) return null;
+  return parts.join('/');
+}
+
+// Fonte do byte da foto no cadastro/edição: pode vir de um staging no R2
+// (upload direto do navegador) ou do multipart legado (fallback sem R2).
+async function resolveUploadPhoto(req) {
+  if (req.body && req.body.stagingKey) {
+    const key = sanitizeUploadKey(req.body.stagingKey);
+    if (!key) return null;
+    const buf = await storage.get(key);
+    if (!buf) return null;
+    return { buffer: buf, stagingKey: key };
+  }
+  if (req.file) {
+    const filePath = req.file.path;
+    const buffer = fs.readFileSync(filePath);
+    return { buffer, filePath };
+  }
+  return null;
+}
+
+// Grava a foto no local final: se veio do staging, tenta CopyObject (sem
+// egress da Render) e cai em get+put se a cópia falhar.
+async function placePhoto(photo, key) {
+  if (photo.stagingKey) {
+    const copied = await storage.copyObject(photo.stagingKey, key);
+    await storage.remove(photo.stagingKey).catch(() => {});
+    if (copied) return;
+  }
+  await storage.put(key, photo.buffer);
+  if (photo.stagingKey) await storage.remove(photo.stagingKey).catch(() => {});
+}
+
+// Descarta o arquivo temporário (disco do multipart ou staging no R2).
+async function discardUpload(photo) {
+  if (!photo) return;
+  if (photo.filePath) {
+    try { fs.unlinkSync(photo.filePath); } catch (e) { /* ignora */ }
+  } else if (photo.stagingKey) {
+    await storage.remove(photo.stagingKey).catch(() => {});
+  }
+}
+
 // Adiciona uma URL pública a cada foto. Sem remoto ativo, mantém o proxy
 // local /faces/ como fallback.
 async function withPhotoUrls(faces) {
@@ -407,6 +462,40 @@ app.post('/api/importer/upload', auth, importUpload.array('files'), (req, res) =
 
   importer.triggerScan();
   res.json({ ok: true, written, skipped });
+});
+
+// Gera a URL assinada de UPLOAD (presigned PUT). O navegador envia o arquivo
+// DIRETO para o R2 — nenhum byte de imagem passa pelo body/multipart aqui.
+app.post('/api/get-upload-url', auth, (req, res) => {
+  const key = sanitizeUploadKey(req.body && req.body.key);
+  if (!key) return res.status(400).json({ ok: false, error: 'Chave de upload inválida.' });
+  const contentType = String((req.body && req.body.contentType) || 'image/jpeg');
+  storage.presignedUploadUrl(key, contentType).then((url) => {
+    if (!url) {
+      return res.json({ ok: false, error: 'Upload direto indisponível (R2/S3 não configurado no servidor).' });
+    }
+    res.json({ ok: true, url, key });
+  }).catch((e) => {
+    res.status(500).json({ ok: false, error: e.message });
+  });
+});
+
+// Confirma imagens já enviadas ao R2 (staging) e as encaminha ao importador.
+// Aqui só trafega JSON (chaves/relpaths), nunca bytes de imagem.
+app.post('/api/importer/complete', auth, (req, res) => {
+  const rawKeys = Array.isArray(req.body && req.body.keys) ? req.body.keys : [];
+  const relpaths = Array.isArray(req.body && req.body.relpaths) ? req.body.relpaths : [];
+  const title = String((req.body && req.body.title) || '').trim();
+  const description = String((req.body && req.body.description) || '').trim();
+  const accepted = [];
+  rawKeys.forEach((k, i) => {
+    const key = sanitizeUploadKey(k);
+    if (!key) return;
+    const rel = sanitizeRelPath(relpaths[i]);
+    importer.importRemote(key, rel || path.basename(key), { title, description });
+    accepted.push(key);
+  });
+  res.json({ ok: true, queued: accepted.length });
 });
 
 app.get('/api/importer/status', auth, (req, res) => {
@@ -555,49 +644,48 @@ app.post('/cadastrar-face', auth, faceUpload.single('foto'), async (req, res) =>
     });
   };
 
-  if (!req.file) return render('Envie uma foto.', null);
+  let photo = null;
+  try {
+    photo = await resolveUploadPhoto(req);
+  } catch (e) {
+    return render('Erro ao ler a foto: ' + e.message, null);
+  }
+  if (!photo) return render('Envie uma foto.', null);
   if (!req.body.name || !req.body.name.trim()) {
-    fs.unlinkSync(req.file.path);
+    await discardUpload(photo);
     return render('Preencha o nome.', null);
   }
 
-  const filePath = req.file.path;
   try {
-    const buffer = fs.readFileSync(filePath);
-    const embedding = await faceService.extractEmbedding(buffer, { inputSize: 224 });
+    const embedding = await faceService.extractEmbedding(photo.buffer, { inputSize: 224 });
     if (!embedding) {
-      fs.unlinkSync(filePath);
+      await discardUpload(photo);
       return render('Nenhum rosto detectado na foto. Tente outra imagem.', null);
     }
 
-    db.get('SELECT COALESCE(MAX(id), 1000) AS maxId FROM faces', (err, row) => {
+    db.get('SELECT COALESCE(MAX(id), 1000) AS maxId FROM faces', async (err, row) => {
       if (err) return render(err.message, null);
       const nextId = row.maxId + 1;
       const finalName = `${nextId}.jpg`;
 
-      // Grava a foto no armazenamento local.
-      storage.put('photos/' + finalName, buffer)
-        .then(() => {
-          blur.cacheBlurred(finalName).catch(() => {});
-        })
-        .then(() => {
-          try { fs.unlinkSync(filePath); } catch (e) { /* já removido */ }
-          db.run(
-            'INSERT INTO faces (id, name, photo, embedding, gender, vehicle, platform, description) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-            [nextId, req.body.name.trim(), finalName, JSON.stringify(embedding), req.body.gender || null, req.body.vehicle || null, req.body.platform || null, req.body.description || null],
-            (err2) => {
-              if (err2) return render(err2.message, null);
-              render(null, `Face cadastrada com ID ${nextId}.`);
-            }
-          );
-        })
-        .catch((err3) => {
-          try { fs.unlinkSync(filePath); } catch (e) { /* já removido */ }
-          render('Erro ao salvar a foto no armazenamento: ' + err3.message, null);
-        });
+      try {
+        await placePhoto(photo, 'photos/' + finalName);
+        blur.cacheBlurred(finalName).catch(() => {});
+        db.run(
+          'INSERT INTO faces (id, name, photo, embedding, gender, vehicle, platform, description) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+          [nextId, req.body.name.trim(), finalName, JSON.stringify(embedding), req.body.gender || null, req.body.vehicle || null, req.body.platform || null, req.body.description || null],
+          (err2) => {
+            if (err2) return render(err2.message, null);
+            render(null, `Face cadastrada com ID ${nextId}.`);
+          }
+        );
+      } catch (err3) {
+        await discardUpload(photo);
+        render('Erro ao salvar a foto no armazenamento: ' + err3.message, null);
+      }
     });
   } catch (err) {
-    fs.unlinkSync(filePath);
+    await discardUpload(photo);
     render('Erro ao processar a foto: ' + err.message, null);
   }
 });
@@ -732,22 +820,25 @@ app.post('/faces/:id/editar', auth, faceUpload.single('foto'), (req, res) => {
 
     let photo = face.photo;
     let embedding = face.embedding;
-    if (req.file) {
-      const filePath = req.file.path;
+    let newUpload = null;
+    try {
+      newUpload = await resolveUploadPhoto(req);
+    } catch (e) {
+      return render('Erro ao ler a nova foto: ' + e.message, null);
+    }
+    if (newUpload) {
       try {
-        const buffer = fs.readFileSync(filePath);
-        const emb = await faceService.extractEmbedding(buffer, { inputSize: 224 });
+        const emb = await faceService.extractEmbedding(newUpload.buffer, { inputSize: 224 });
         if (!emb) {
-          fs.unlinkSync(filePath);
+          await discardUpload(newUpload);
           return render('Nenhum rosto detectado na nova foto. A foto original foi mantida.', null);
         }
-        // Substitui a foto no armazenamento local.
-        await storage.put('photos/' + face.photo, buffer);
+        // Substitui a foto no armazenamento.
+        await placePhoto(newUpload, 'photos/' + face.photo);
         blur.cacheBlurred(face.photo).catch(() => {});
-        try { fs.unlinkSync(filePath); } catch (e2) { /* já removido */ }
         embedding = JSON.stringify(emb);
       } catch (e) {
-        if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+        await discardUpload(newUpload);
         return render('Erro ao processar a nova foto: ' + e.message, null);
       }
     }
@@ -833,7 +924,28 @@ excelImport.setResumeCallback(() => importer.start());
 // Limpa pastas de staging (zip) órfãs de sessões/previews anteriores.
 excelImport.purgeStaging();
 
-storage.init().catch((e) => console.error('Erro ao iniciar storage:', e.message));
+// No boot, re-fila uploads diretos que ficaram em staging (ex.: o servidor
+// reiniciou durante a importação). Purga antes os órfãos mais velhos.
+async function requeueStaging() {
+  if (!storage.isRemote()) return;
+  let keys;
+  try {
+    keys = await storage.list('staging/uploads/');
+  } catch (e) {
+    return;
+  }
+  for (const k of keys) {
+    const rel = k.replace(/^staging\/uploads\/[^/]+\//, '');
+    importer.importRemote(k, rel, {});
+  }
+}
+
+storage.init()
+  .catch((e) => console.error('Erro ao iniciar storage:', e.message))
+  .then(() => {
+    storage.purgeStaging().catch(() => {});
+    requeueStaging();
+  });
 
 faceService.warmup()
   .then(() => {

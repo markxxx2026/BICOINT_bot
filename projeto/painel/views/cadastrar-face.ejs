@@ -242,6 +242,62 @@
   });
 })();
 </script>
+<script>
+(function () {
+  var form = document.querySelector('form[action="/cadastrar-face"]');
+  var foto = document.getElementById('foto');
+  if (!form || !foto) return;
+
+  function mimeFor(name, type) {
+    if (type) return type;
+    var ext = (name || '').split('.').pop().toLowerCase();
+    if (ext === 'png') return 'image/png';
+    if (ext === 'webp') return 'image/webp';
+    return 'image/jpeg';
+  }
+
+  form.addEventListener('submit', function (e) {
+    if (!foto.files.length) return;
+    e.preventDefault();
+    var btn = form.querySelector('button[type="submit"]');
+    var original = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = '⬆️ Enviando foto...';
+    var f = foto.files[0];
+    var ct = mimeFor(f.name, f.type);
+    var key = 'staging/uploads/' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8) + '/' + (f.name || 'foto');
+
+    function fallback() {
+      btn.disabled = false;
+      btn.textContent = original;
+      form.submit();
+    }
+
+    fetch('/api/get-upload-url', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: key, contentType: ct })
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (res) {
+        if (!res.ok || !res.url) { fallback(); return; }
+        return fetch(res.url, { method: 'PUT', headers: { 'Content-Type': ct }, body: f })
+          .then(function (ur) {
+            if (!ur.ok) { fallback(); return; }
+            var h = document.createElement('input');
+            h.type = 'hidden';
+            h.name = 'stagingKey';
+            h.value = res.key;
+            form.appendChild(h);
+            foto.removeAttribute('name');
+            form.submit();
+          })
+          .catch(function () { fallback(); });
+      })
+      .catch(function () { fallback(); });
+  });
+})();
+</script>
 <script src="/app.js"></script>
 </body>
 </html>

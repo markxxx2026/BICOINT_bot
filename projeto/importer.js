@@ -53,6 +53,7 @@ const status = {
 let started = false;
 let pollTimer = null;
 let active = 0;
+let remoteActive = 0;
 const queue = [];
 const inflight = new Set();
 let idle = Promise.resolve();
@@ -275,6 +276,144 @@ async function importFile(filePath) {
   });
 }
 
+/* ==================== Importação direta (upload p/ R2) ==================== */
+
+// Processa uma imagem que já está no bucket (staging/uploads/...) e que foi
+// enviada DIRETO pelo navegador via presigned PUT (sem passar pelo Express).
+// O byte chega aqui apenas como leitura do R2 (ingresso na Render, que não
+// conta na cota de saída); a "promoção" para o local final usa CopyObject
+// (servidor-a-servidor, sem egress da Render) com fallback get+put.
+async function importRemoteInner(key, rel, meta) {
+  rel = String(rel || '').replace(/\\/g, '/');
+  const tag = rel || key;
+
+  let buffer;
+  try {
+    buffer = await storage.get(key);
+  } catch (e) {
+    status.failed++;
+    log(`Erro ao ler ${tag} do armazenamento: ${e.message}`);
+    await storage.remove(key).catch(() => {});
+    return;
+  }
+  if (!buffer) {
+    status.failed++;
+    log(`Arquivo ${tag} não encontrado no armazenamento. Removido da fila.`);
+    return;
+  }
+
+  const hash = sha256(buffer);
+
+  const existing = await dbGet('SELECT id FROM faces WHERE photo_hash = ?', [hash]);
+  if (existing) {
+    status.duplicates++;
+    log(`Duplicado (hash ${hash.slice(0, 12)}…) — ${tag} já é a face #${existing.id}. Removido.`);
+    await storage.remove(key).catch(() => {});
+    return;
+  }
+
+  log(`Processando ${tag} (${buffer.length} bytes)...`);
+  status.current.push(tag);
+
+  let embedding = null;
+  try {
+    embedding = await faceService.extractEmbedding(buffer);
+  } catch (e) {
+    status.current = status.current.filter((c) => c !== tag);
+    status.rejected++;
+    log(`Erro ao extrair rosto de ${tag}: ${e.message}`);
+    await storage.remove(key).catch(() => {});
+    return;
+  }
+  status.current = status.current.filter((c) => c !== tag);
+
+  if (!embedding) {
+    status.rejected++;
+    log(`Nenhum rosto detectado em ${tag}. Removido.`);
+    await storage.remove(key).catch(() => {});
+    return;
+  }
+
+  const stem = prettyStem(path.basename(String(rel || key)));
+  const name = String(meta.title || stem).trim() || stem;
+  const description = meta.description || null;
+  const folderCat = rel ? String(rel).split('/')[0] : null;
+  const category = folderCat || null;
+  const price = DEFAULT_PRICE;
+  const gender = meta.gender || null;
+  const vehicle = meta.vehicle || null;
+  const platform = meta.platform || null;
+  const tags = Array.isArray(meta.tags) ? meta.tags.filter(Boolean) : [];
+  let desc = description;
+  if (tags.length) desc = desc ? desc + '\n\nTags: ' + tags.join(', ') : 'Tags: ' + tags.join(', ');
+
+  await enqueueIdle(async () => {
+    try {
+      const row = await dbGet('SELECT COALESCE(MAX(id), 1000) AS maxId FROM faces');
+      const nextId = row.maxId + 1;
+      const finalName = `${nextId}.${extFor(String(rel || key))}`;
+
+      const copied = await storage.copyObject(key, 'photos/' + finalName);
+      if (!copied) {
+        const ok = await putWithRetry('photos/' + finalName, buffer, tag);
+        if (!ok) {
+          status.failed++;
+          log(`Importação de ${tag} falhou no armazenamento. Removido.`);
+          await storage.remove(key).catch(() => {});
+          return;
+        }
+      }
+
+      blur.cacheBlurred(finalName).catch(() => {});
+
+      await dbRun(
+        'INSERT INTO faces (id, name, photo, embedding, gender, vehicle, platform, description, category, price, photo_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [nextId, name, finalName, JSON.stringify(embedding), gender, vehicle, platform, desc, category, price, hash]
+      );
+
+      await storage.remove(key).catch(() => {});
+      log(`Importada ${tag} -> face #${nextId} (${finalName}) | nome="${name}" categoria="${category || '—'}"`);
+    } catch (e) {
+      status.failed++;
+      log(`Erro ao cadastrar ${tag}: ${e.message}`);
+      await storage.remove(key).catch(() => {});
+    }
+  });
+}
+
+function importRemote(key, rel, meta) {
+  const run = () => {
+    remoteActive++;
+    importRemoteInner(key, rel, meta || {})
+      .catch((e) => {
+        status.failed++;
+        log(`Erro inesperado ao importar ${rel || key}: ${e.message}`);
+      })
+      .finally(() => {
+        remoteActive--;
+        status.lastRun = new Date().toISOString();
+        releaseRemote();
+        if (remoteActive === 0 && active === 0 && queue.length === 0) {
+          status.finishedAt = new Date().toISOString();
+        }
+      });
+  };
+  gateRemote(run);
+}
+
+// Limita a concorrência das importações remotas (embedding é caro em CPU).
+let remoteSlots = CONCURRENCY;
+const remoteWaiters = [];
+function gateRemote(fn) {
+  if (remoteSlots > 0) { remoteSlots--; fn(); return; }
+  remoteWaiters.push(fn);
+}
+function releaseRemote() {
+  const next = remoteWaiters.shift();
+  if (next) { next(); return; }
+  remoteSlots++;
+}
+
 /* ==================== Fila + concorrência ==================== */
 
 function pump() {
@@ -343,11 +482,11 @@ function getStatus() {
   return {
     ...status,
     total,
-    idle: active === 0 && queue.length === 0,
+    idle: active === 0 && queue.length === 0 && remoteActive === 0,
     uploadsDir: UPLOADS_DIR,
     rejectedDir: REJECTED_DIR,
     concurrency: CONCURRENCY
   };
 }
 
-module.exports = { start, stop, triggerScan, getStatus, UPLOADS_DIR, REJECTED_DIR, IMAGE_RE };
+module.exports = { start, stop, triggerScan, importRemote, getStatus, UPLOADS_DIR, REJECTED_DIR, IMAGE_RE };
