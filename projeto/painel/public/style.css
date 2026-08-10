@@ -528,6 +528,88 @@ tbody tr:hover { background: rgba(52, 211, 153, 0.05); }
 
 .import-stats strong { color: var(--text); }
 
+/* ============ ImportaÃ§Ã£o via Excel ============ */
+
+.excel-actions { display: flex; gap: 10px; align-items: center; margin-top: 14px; }
+
+.excel-dropzone {
+  padding: 22px 18px;
+  margin-top: 10px;
+}
+
+.excel-dropzone strong { font-size: 0.92rem; }
+
+.summary-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.chip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 96px;
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  background: rgba(5, 10, 8, 0.7);
+  border: 1px solid var(--border);
+}
+
+.chip strong { font-size: 1.15rem; color: #ffffff; }
+.chip span { font-size: 0.7rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.4px; }
+
+.chip-ok strong { color: #a7f3d0; }
+.chip-warn strong { color: #fde68a; }
+.chip-err strong { color: #fca5a5; }
+
+.preview-scroll {
+  max-height: 380px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.preview-scroll table { font-size: 0.85rem; }
+.preview-scroll th { position: sticky; top: 0; background: #0b1418; z-index: 1; }
+.preview-scroll td, .preview-scroll th { white-space: nowrap; }
+
+.status-badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.st-ok { background: rgba(52, 211, 153, 0.12); border: 1px solid rgba(52, 211, 153, 0.4); color: #a7f3d0; }
+.st-upd { background: rgba(167, 139, 250, 0.12); border: 1px solid rgba(167, 139, 250, 0.4); color: #ddd6fe; }
+.st-warn { background: rgba(245, 158, 11, 0.12); border: 1px solid rgba(245, 158, 11, 0.4); color: #fde68a; }
+.st-err { background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.4); color: #fecaca; }
+
+.job-progress { margin-top: 16px; }
+
+.combined-box {
+  margin-top: 18px;
+  padding: 16px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: rgba(5, 10, 8, 0.4);
+}
+
+.combined-box h3 {
+  font-size: 0.92rem;
+  color: #ffffff;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.combined-box .excel-dropzone { padding: 18px 14px; }
+
 /* ============ GrÃ¡ficos ============ */
 
 .charts-row {

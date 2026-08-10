@@ -1,7 +1,7 @@
 const path = require('path');
 const sqlite3 = require('sqlite3').verbose();
 
-const dbPath = path.join(__dirname, 'painel.db');
+const dbPath = process.env.DB_PATH || path.join(__dirname, 'painel.db');
 const db = new sqlite3.Database(dbPath);
 
 db.serialize(() => {
@@ -65,6 +65,7 @@ db.serialize(() => {
   addColumn('faces', 'category TEXT');
   addColumn('faces', 'photo_hash TEXT');
   addColumn('faces', 'price REAL');
+  addColumn('faces', 'cpf TEXT');
 
   db.run(`CREATE TABLE IF NOT EXISTS unlocks (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

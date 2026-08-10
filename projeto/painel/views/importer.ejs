@@ -105,6 +105,76 @@
   </section>
 
   <section class="panel">
+    <h2>📊 Dados da planilha</h2>
+    <p class="hint">
+      Vincula os registros de uma planilha às fotos pela <strong>numeração do arquivo</strong>
+      (ex.: <code>001.jpg</code> ↔ linha com Número <code>001</code>). As fotos numeradas
+      devem estar na área de fotos acima ou já no servidor. A correspondência é feita pelo
+      número, não pela posição da linha.
+    </p>
+    <div class="excel-actions">
+      <button type="button" class="btn primary small" id="btn-excel">📊 Importar Excel</button>
+      <a class="btn small" href="/api/excel/template">⬇ Baixar modelo Excel</a>
+    </div>
+    <div class="dropzone excel-dropzone" id="dropzone-excel">
+      <strong>📄 Solte a planilha aqui</strong>
+      <span class="hint">ou clique para escolher (.xlsx / .xls)</span>
+    </div>
+    <input type="file" id="input-excel" accept=".xlsx,.xls" hidden>
+    <div id="excel-file" class="hint" style="margin-top:10px;"></div>
+
+    <div class="combined-box">
+      <h3>📦 Envio em conjunto (pasta de fotos + Excel)</h3>
+      <p class="hint">
+        Solte aqui um arquivo <code>.zip</code> com as fotos numeradas. O sistema vincula cada
+        linha do Excel (pela coluna Número) à foto com o mesmo número dentro da pasta.
+      </p>
+      <div class="dropzone excel-dropzone" id="dropzone-zip">
+        <strong>🗂 Solte a pasta .zip com as fotos</strong>
+        <span class="hint">ou clique para escolher (.zip)</span>
+      </div>
+      <input type="file" id="input-zip" accept=".zip" hidden>
+      <div class="excel-actions" style="margin-top:10px;">
+        <span class="hint" id="zip-file"></span>
+        <button type="button" class="btn primary small" id="btn-zip-excel">📥 Vincular Excel + fotos</button>
+      </div>
+    </div>
+
+    <div id="excel-status" class="hint" style="margin-top:10px;"></div>
+  </section>
+
+  <section class="panel" id="excel-preview" style="display:none;">
+    <h2>🔎 Prévia da importação</h2>
+    <div class="summary-chips" id="excel-summary"></div>
+    <div class="preview-scroll">
+      <table class="preview-table">
+        <thead>
+          <tr>
+            <th>Foto</th>
+            <th>Número</th>
+            <th>Nome</th>
+            <th>CPF</th>
+            <th>Descrição</th>
+            <th>Plataforma</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="excel-table"></tbody>
+      </table>
+    </div>
+    <div class="job-progress" id="excel-job" style="display:none;">
+      <div class="progress-wrap">
+        <div class="progress-bar" id="excel-progress" style="width:0%"></div>
+      </div>
+      <p class="hint" id="excel-progress-text">Importando...</p>
+    </div>
+    <div class="excel-actions" id="excel-actions" style="margin-top:14px;">
+      <button type="button" class="btn" id="btn-excel-cancel">Cancelar</button>
+      <button type="button" class="btn primary" id="btn-excel-confirm">✓ Confirmar importação</button>
+    </div>
+  </section>
+
+  <section class="panel">
     <h2>📊 Status da importação</h2>
     <div class="progress-wrap">
       <div class="progress-bar" id="progress-bar" style="width:0%"></div>
@@ -227,6 +297,257 @@
 
   pollTimer = setInterval(poll, 1500);
   poll();
+})();
+</script>
+
+<script>
+(function () {
+  var dropzoneEx = document.getElementById('dropzone-excel');
+  var inputEx = document.getElementById('input-excel');
+  var fileInfo = document.getElementById('excel-file');
+  var statusLine = document.getElementById('excel-status');
+  var previewPanel = document.getElementById('excel-preview');
+  var summaryBox = document.getElementById('excel-summary');
+  var tableBody = document.getElementById('excel-table');
+  var jobBox = document.getElementById('excel-job');
+  var progressBar = document.getElementById('excel-progress');
+  var progressText = document.getElementById('excel-progress-text');
+  var btnCancel = document.getElementById('btn-excel-cancel');
+  var btnConfirm = document.getElementById('btn-excel-confirm');
+  var dropzoneZip = document.getElementById('dropzone-zip');
+  var inputZip = document.getElementById('input-zip');
+  var zipInfo = document.getElementById('zip-file');
+  var btnZipExcel = document.getElementById('btn-zip-excel');
+  var lastExcelFile = null;
+  var lastZipFile = null;
+  var pollTimer = null;
+
+  var STATUS_LABEL = {
+    'ok': '✓ Vinculado',
+    'atualizar': '♻️ Atualizar',
+    'sem-foto': '⚠ Registro sem foto',
+    'dup-excel': '❌ Número duplicado no Excel',
+    'dup-foto': '❌ Foto duplicada',
+    'sem-numero': '❌ Sem número'
+  };
+  var STATUS_CLS = {
+    'ok': 'st-ok',
+    'atualizar': 'st-upd',
+    'sem-foto': 'st-warn',
+    'dup-excel': 'st-err',
+    'dup-foto': 'st-err',
+    'sem-numero': 'st-err'
+  };
+
+  function escapeHtml(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  ['dragenter', 'dragover'].forEach(function (ev) {
+    dropzoneEx.addEventListener(ev, function (e) {
+      e.preventDefault();
+      dropzoneEx.classList.add('over');
+    });
+  });
+  ['dragleave', 'drop'].forEach(function (ev) {
+    dropzoneEx.addEventListener(ev, function (e) {
+      e.preventDefault();
+      dropzoneEx.classList.remove('over');
+    });
+  });
+  dropzoneEx.addEventListener('drop', function (e) {
+    var f = e.dataTransfer.files && e.dataTransfer.files[0];
+    if (f) parseExcelFile(f);
+  });
+  dropzoneEx.addEventListener('click', function () { inputEx.click(); });
+  document.getElementById('btn-excel').addEventListener('click', function (e) {
+    e.stopPropagation();
+    inputEx.click();
+  });
+  inputEx.addEventListener('change', function () {
+    if (inputEx.files.length) parseExcelFile(inputEx.files[0]);
+    inputEx.value = '';
+  });
+
+  function parseExcelFile(file) {
+    var ext = (file.name || '').split('.').pop().toLowerCase();
+    if (ext !== 'xlsx' && ext !== 'xls') {
+      statusLine.textContent = '❌ Formato inválido. Use .xlsx ou .xls.';
+      return;
+    }
+    lastExcelFile = file;
+    fileInfo.textContent = '📄 Arquivo selecionado: ' + file.name + ' (' + (file.size / 1024).toFixed(1) + ' KB)';
+    statusLine.textContent = '⏳ Processando planilha...';
+    var fd = new FormData();
+    fd.append('excel', file);
+    fetch('/api/excel/parse', { method: 'POST', body: fd })
+      .then(function (r) { return r.json(); })
+      .then(function (res) { handleParseResponse(res, 'planilha'); })
+      .catch(function () {
+        statusLine.textContent = '❌ Falha ao processar o Excel.';
+      });
+  }
+
+  function handleParseResponse(res, tipo) {
+    if (!res.ok) {
+      statusLine.textContent = '❌ ' + (res.error || 'Não foi possível processar a ' + tipo + '.');
+      previewPanel.style.display = 'none';
+      return;
+    }
+    var origem = tipo === 'zip' ? ' (fotos do .zip: ' + (res.preview.fotosZip || 0) + ')' : '';
+    statusLine.textContent = '✅ Processado com sucesso' + origem + '. ' +
+      res.preview.summary.correspondencias + ' registros serão vinculados às fotos.';
+    renderPreview(res.preview);
+  }
+
+  ['dragenter', 'dragover'].forEach(function (ev) {
+    dropzoneZip.addEventListener(ev, function (e) {
+      e.preventDefault();
+      dropzoneZip.classList.add('over');
+    });
+  });
+  ['dragleave', 'drop'].forEach(function (ev) {
+    dropzoneZip.addEventListener(ev, function (e) {
+      e.preventDefault();
+      dropzoneZip.classList.remove('over');
+    });
+  });
+  dropzoneZip.addEventListener('drop', function (e) {
+    var f = e.dataTransfer.files && e.dataTransfer.files[0];
+    if (f) selectZip(f);
+  });
+  dropzoneZip.addEventListener('click', function () { inputZip.click(); });
+  inputZip.addEventListener('change', function () {
+    if (inputZip.files.length) selectZip(inputZip.files[0]);
+    inputZip.value = '';
+  });
+
+  function selectZip(file) {
+    if ((file.name || '').split('.').pop().toLowerCase() !== 'zip') {
+      zipInfo.textContent = '❌ Use um arquivo .zip.';
+      lastZipFile = null;
+      return;
+    }
+    lastZipFile = file;
+    zipInfo.textContent = '🗂 Zip selecionado: ' + file.name + ' (' + (file.size / 1024 / 1024).toFixed(1) + ' MB)';
+  }
+
+  btnZipExcel.addEventListener('click', function () {
+    if (!lastExcelFile) {
+      statusLine.textContent = '❌ Selecione primeiro o Excel na área acima (📊 Importar Excel).';
+      return;
+    }
+    if (!lastZipFile) {
+      statusLine.textContent = '❌ Selecione a pasta .zip com as fotos numeradas.';
+      return;
+    }
+    statusLine.textContent = '⏳ Extraindo fotos e processando planilha...';
+    var fd = new FormData();
+    fd.append('excel', lastExcelFile);
+    fd.append('zip', lastZipFile);
+    fetch('/api/excel/import-zip', { method: 'POST', body: fd })
+      .then(function (r) { return r.json(); })
+      .then(function (res) { handleParseResponse(res, 'zip'); })
+      .catch(function () {
+        statusLine.textContent = '❌ Falha ao processar o zip + Excel.';
+      });
+  });
+
+  function renderPreview(preview) {
+    summaryBox.innerHTML = '';
+    var s = preview.summary;
+    var chips = [
+      { label: 'Fotos encontradas', v: s.fotosEncontradas, cls: '' },
+      { label: 'Registros no Excel', v: s.registrosExcel, cls: '' },
+      { label: 'Correspondências', v: s.correspondencias, cls: 'ok' },
+      { label: 'Fotos sem Excel', v: s.fotosSemExcel, cls: s.fotosSemExcel ? 'warn' : 'ok' },
+      { label: 'Excel sem foto', v: s.excelSemFoto, cls: s.excelSemFoto ? 'warn' : 'ok' },
+      { label: 'Erros', v: s.erros, cls: s.erros ? 'err' : 'ok' }
+    ];
+    chips.forEach(function (c) {
+      var el = document.createElement('span');
+      el.className = 'chip' + (c.cls ? ' chip-' + c.cls : '');
+      el.innerHTML = '<strong>' + c.v + '</strong><span>' + c.label + '</span>';
+      summaryBox.appendChild(el);
+    });
+
+    tableBody.innerHTML = '';
+    var rows = preview.table || [];
+    if (!rows.length) {
+      var tr = document.createElement('tr');
+      tr.innerHTML = '<td colspan="7" class="empty">Nenhuma linha com dados.</td>';
+      tableBody.appendChild(tr);
+    }
+    rows.forEach(function (r) {
+      var tr = document.createElement('tr');
+      tr.innerHTML =
+        '<td>' + escapeHtml(r.foto || '—') + '</td>' +
+        '<td>' + escapeHtml(r.numeroDisplay || '—') + '</td>' +
+        '<td>' + escapeHtml(r.nome || '—') + '</td>' +
+        '<td>' + escapeHtml(r.cpfMasked || '—') + '</td>' +
+        '<td>' + escapeHtml((r.descricao || '—').slice(0, 40)) + '</td>' +
+        '<td>' + escapeHtml(r.plataforma || '—') + '</td>' +
+        '<td><span class="status-badge ' + (STATUS_CLS[r.status] || '') + '">' + (STATUS_LABEL[r.status] || escapeHtml(r.status)) + '</span></td>';
+      tableBody.appendChild(tr);
+    });
+
+    previewPanel.style.display = '';
+    jobBox.style.display = 'none';
+    progressBar.style.width = '0%';
+    btnConfirm.disabled = false;
+  }
+
+  btnConfirm.addEventListener('click', function () {
+    btnConfirm.disabled = true;
+    jobBox.style.display = '';
+    progressText.textContent = 'Iniciando importação...';
+    fetch('/api/excel/confirm', { method: 'POST' })
+      .then(function (r) { return r.json(); })
+      .then(function (res) {
+        if (!res.ok) {
+          btnConfirm.disabled = false;
+          progressText.textContent = '❌ ' + (res.error || 'Erro ao iniciar a importação.');
+          return;
+        }
+        startPolling();
+      })
+      .catch(function () {
+        btnConfirm.disabled = false;
+        progressText.textContent = '❌ Falha ao iniciar a importação.';
+      });
+  });
+
+  function startPolling() {
+    if (pollTimer) clearInterval(pollTimer);
+    pollTimer = setInterval(function () {
+      fetch('/api/excel/status')
+        .then(function (r) { return r.json(); })
+        .then(function (st) {
+          var pct = st.total ? Math.round((st.done / st.total) * 100) : 0;
+          progressBar.style.width = pct + '%';
+          if (st.running) {
+            progressText.textContent = 'Importando... ' + st.done + ' / ' + st.total +
+              ' registros processados' + (st.current ? ' (' + st.current + ')' : '');
+          } else if (st.total > 0) {
+            clearInterval(pollTimer);
+            pollTimer = null;
+            progressText.textContent = '✅ Importação concluída: ' + st.ok + ' ok, ' +
+              st.failed + ' falha(s). Confira em "Cadastrar Face".';
+            btnConfirm.disabled = false;
+          }
+        })
+        .catch(function () {});
+    }, 1200);
+  }
+
+  btnCancel.addEventListener('click', function () {
+    fetch('/api/excel/cancel', { method: 'POST' }).catch(function () {});
+    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+    previewPanel.style.display = 'none';
+    statusLine.textContent = 'Importação cancelada. Nenhum dado foi alterado.';
+  });
 })();
 </script>
 </main>

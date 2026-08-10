@@ -128,11 +128,23 @@ function euclideanDistance(a, b) {
   return Math.sqrt(sum);
 }
 
+function parseStoredEmbedding(face) {
+  if (!face || face.embedding == null) return null;
+  try {
+    const a = JSON.parse(face.embedding);
+    if (!Array.isArray(a) || !a.length || !a.every((v) => Number.isFinite(v))) return null;
+    return a;
+  } catch (e) {
+    return null;
+  }
+}
+
 function findBestMatch(embedding, faces) {
   let best = null;
   let bestDistance = Infinity;
   for (const face of faces) {
-    const stored = JSON.parse(face.embedding);
+    const stored = parseStoredEmbedding(face);
+    if (!stored) continue;
     const d = euclideanDistance(embedding, stored);
     if (d < bestDistance) {
       bestDistance = d;
@@ -149,7 +161,8 @@ function findClosest(embedding, faces) {
   let best = null;
   let bestDistance = Infinity;
   for (const face of faces) {
-    const stored = JSON.parse(face.embedding);
+    const stored = parseStoredEmbedding(face);
+    if (!stored) continue;
     const d = euclideanDistance(embedding, stored);
     if (d < bestDistance) {
       bestDistance = d;

@@ -10,6 +10,7 @@ const blur = require('../blur');
 const referrals = require('../referrals');
 const storage = require('../storage');
 const importer = require('../importer');
+const excelImport = require('../excel-import');
 
 const app = express();
 const PORT = process.env.PANEL_PORT || 3000;
@@ -418,6 +419,129 @@ app.get('/api/importer/status', auth, (req, res) => {
   res.json(importer.getStatus());
 });
 
+/* ==================== Importação via Excel ==================== */
+
+// Limpa uma prévia antiga com fotos em staging (zip) antes de substituí-la.
+function clearOldStaging(token) {
+  const old = excelImport.getPending(token);
+  if (old && old.opts && old.opts.stagingDir) {
+    excelImport.cleanupStaging(old.opts.stagingDir);
+  }
+}
+
+app.post('/api/excel/parse', auth, importUpload.single('excel'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ ok: false, error: 'Nenhum arquivo Excel enviado.' });
+    const filename = req.file.originalname || '';
+    const ext = path.extname(filename).toLowerCase();
+    if (ext !== '.xlsx' && ext !== '.xls') {
+      return res.status(400).json({ ok: false, error: 'Formato inválido. Envie um arquivo .xlsx ou .xls.' });
+    }
+    const data = await excelImport.buildPreview(req.file.buffer, filename);
+    const token = parseCookies(req).session;
+    clearOldStaging(token);
+    excelImport.setPending(token, data);
+    // Pausa o importador automático enquanto a prévia estiver aberta,
+    // para ele não renomear/consumir as fotos numeradas antes da confirmação.
+    importer.stop();
+    res.json({
+      ok: true,
+      preview: { summary: data.summary, table: data.table, filename }
+    });
+  } catch (e) {
+    res.status(400).json({ ok: false, error: e.message });
+  }
+});
+
+// Upload em conjunto: pasta de fotos (.zip) + Excel. As fotos ficam em staging
+// e só entram no catálogo na confirmação (o importador automático não as vê).
+const bothUpload = multer({
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => {
+      const d = path.join(excelImport.STAGING_DIR, 'tmp');
+      fs.mkdirSync(d, { recursive: true });
+      cb(null, d);
+    },
+    filename: (req, file, cb) => {
+      const safe = String(file.originalname || 'arquivo').replace(/[^\w.\-]/g, '_');
+      cb(null, `${Date.now()}-${Math.round(Math.random() * 1e9)}-${safe}`);
+    }
+  }),
+  limits: { fileSize: 300 * 1024 * 1024, files: 2 }
+});
+
+app.post('/api/excel/import-zip', auth, bothUpload.fields([{ name: 'excel', maxCount: 1 }, { name: 'zip', maxCount: 1 }]), async (req, res) => {
+  const token = parseCookies(req).session;
+  let stagingDir = null;
+  try {
+    const excelFile = req.files && req.files.excel && req.files.excel[0];
+    const zipFile = req.files && req.files.zip && req.files.zip[0];
+    if (!excelFile) return res.status(400).json({ ok: false, error: 'Envie o arquivo Excel junto com o .zip.' });
+    if (!zipFile) return res.status(400).json({ ok: false, error: 'Envie a pasta de fotos em .zip.' });
+    if (path.extname(excelFile.originalname).toLowerCase() !== '.xlsx' && path.extname(excelFile.originalname).toLowerCase() !== '.xls') {
+      return res.status(400).json({ ok: false, error: 'Excel inválido. Use .xlsx ou .xls.' });
+    }
+    if (path.extname(zipFile.originalname).toLowerCase() !== '.zip') {
+      return res.status(400).json({ ok: false, error: 'Formato inválido. O arquivo de fotos deve ser .zip.' });
+    }
+    const excelBuf = fs.readFileSync(excelFile.path);
+    const extracted = excelImport.extractZipPhotos(zipFile.path);
+    stagingDir = extracted.dir;
+    const data = await excelImport.buildPreview(excelBuf, excelFile.originalname, { photosDir: extracted.dir });
+    clearOldStaging(token);
+    excelImport.setPending(token, data, { stagingDir });
+    importer.stop();
+    res.json({
+      ok: true,
+      preview: { summary: data.summary, table: data.table, filename: excelFile.originalname, fotosZip: extracted.photos.length }
+    });
+  } catch (e) {
+    if (stagingDir) excelImport.cleanupStaging(stagingDir);
+    res.status(400).json({ ok: false, error: e.message });
+  } finally {
+    for (const key of ['excel', 'zip']) {
+      const f = req.files && req.files[key] && req.files[key][0];
+      if (f) { try { fs.unlinkSync(f.path); } catch (err) { /* ignora */ } }
+    }
+  }
+});
+
+app.post('/api/excel/confirm', auth, (req, res) => {
+  const token = parseCookies(req).session;
+  const pending = excelImport.getPending(token);
+  if (!pending) return res.status(400).json({ ok: false, error: 'Nenhuma prévia aguardando confirmação. Importe o Excel novamente.' });
+  const stagingDir = pending.opts && pending.opts.stagingDir;
+  const p = excelImport.startImport(pending.data.rows, {
+    onDone: stagingDir ? () => excelImport.cleanupStaging(stagingDir) : null
+  });
+  if (p === false) return res.status(409).json({ ok: false, error: 'Já existe uma importação em andamento.' });
+  excelImport.clearPending(token);
+  res.json({ ok: true });
+});
+
+app.post('/api/excel/cancel', auth, (req, res) => {
+  const token = parseCookies(req).session;
+  const pending = excelImport.getPending(token);
+  if (pending && pending.opts && pending.opts.stagingDir) {
+    excelImport.cleanupStaging(pending.opts.stagingDir);
+  }
+  excelImport.clearPending(token);
+  excelImport.cancelJob();
+  importer.start();
+  res.json({ ok: true });
+});
+
+app.get('/api/excel/status', auth, (req, res) => {
+  res.json(excelImport.getJobStatus());
+});
+
+app.get('/api/excel/template', auth, (req, res) => {
+  const buf = excelImport.generateTemplate();
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Content-Disposition', 'attachment; filename="modelo_importacao.xlsx"');
+  res.send(buf);
+});
+
 const LIST_SQL = 'SELECT * FROM faces WHERE COALESCE(antecedentes, 0) = 0 ORDER BY id';
 
 app.get('/cadastrar-face', auth, async (req, res) => {
@@ -684,6 +808,13 @@ app.post('/api/asaas/webhook', (req, res) => {
 });
 
 seedAdmin();
+
+// Ao terminar (ou cancelar) uma importação via Excel, retoma o
+// importador automático de fotos que foi pausado durante a prévia.
+excelImport.setResumeCallback(() => importer.start());
+
+// Limpa pastas de staging (zip) órfãs de sessões/previews anteriores.
+excelImport.purgeStaging();
 
 storage.init().catch((e) => console.error('Erro ao iniciar storage:', e.message));
 
