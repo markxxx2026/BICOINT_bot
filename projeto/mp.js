@@ -2,16 +2,21 @@ require('dotenv').config();
 const https = require('https');
 
 const BASE_URL = 'https://api.mercadopago.com';
-const TOKEN = process.env.MP_ACCESS_TOKEN;
 
 const qrCache = new Map();
+
+// Lê o token a cada uso (não congela no carregamento do módulo), aceitando
+// também configuração posterior do ambiente sem precisar reiniciar o bot.
+function getAccessToken() {
+  return String(process.env.MP_ACCESS_TOKEN || '').trim();
+}
 
 function request(method, path, body, extraHeaders) {
   return new Promise((resolve, reject) => {
     const url = new URL(BASE_URL + path);
     const data = body === undefined ? null : JSON.stringify(body);
     const headers = {
-      Authorization: `Bearer ${TOKEN}`,
+      Authorization: `Bearer ${getAccessToken()}`,
       'Content-Type': 'application/json',
       'User-Agent': 'BicoBot/1.0'
     };
@@ -90,9 +95,9 @@ async function createPixPayment({ chatId, value, externalReference, description 
     external_reference: String(externalReference || '').slice(0, 256),
     payer: { email: String(process.env.MP_PAYER_EMAIL || '') }
   };
-payer: { 
-    email: String(process.env.PAYER_EMAIL || '') 
-}
+  if (process.env.MP_NOTIFICATION_URL) {
+    body.notification_url = process.env.MP_NOTIFICATION_URL;
+  }
   const payment = await request('POST', '/v1/payments', body, { 'X-Idempotency-Key': String(externalReference || `PIX_${Date.now()}`) });
   const td = transactionDataFrom(payment);
   if (td && td.qr_code) qrCache.set(String(payment.id), td);
@@ -120,8 +125,8 @@ async function getPaymentStatus(paymentId) {
 
 module.exports = { createPixPayment, getPixQrCode, getPaymentStatus, normalizeStatus, request };
 
-if (TOKEN) {
+if (getAccessToken()) {
   console.log(`[mp] Mercado Pago PIX ativo (token=SIM, email=${process.env.MP_PAYER_EMAIL ? 'SIM' : 'NÃO'}).`);
 } else {
   console.log('[mp] ATENCAO: MP_ACCESS_TOKEN ausente — pagamento PIX desativado.');
-pagador:{ e-mail;Corda(processo.ambiente.E-MAIL DO PAGADOR DEPARTAMENTO || '') }
+}

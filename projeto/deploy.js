@@ -32,17 +32,29 @@ async function main() {
   });
 
   async function registerWebhook() {
+    console.log('Registrando webhook do Telegram ->', WEBHOOK_URL);
     for (let attempt = 1; attempt <= 5; attempt++) {
       try {
         await bot.setWebHook(WEBHOOK_URL);
         console.log('Webhook configurado:', WEBHOOK_URL);
         return true;
       } catch (e) {
-        console.error(`Erro ao configurar webhook (tentativa ${attempt}/5):`, e.message);
+        // "EFATAL: AggregateError" vem da camada HTTP: conjunto de falhas de rede/DNS
+        // ao falar com api.telegram.org. Desembrulha para logar a causa real.
+        const detail = Array.isArray(e.errors) && e.errors.length
+          ? e.errors.map((er) => er.message || er.code || String(er)).join(' | ')
+          : (e.message || String(e));
+        console.error(`Erro ao configurar webhook (tentativa ${attempt}/5): ${detail}`);
         if (attempt < 5) await new Promise((r) => setTimeout(r, 10000));
       }
     }
-    console.error('Não foi possível registrar o webhook após 5 tentativas.');
+    try {
+      const info = await bot.getWebHookInfo();
+      console.error('Não foi possível registrar o webhook após 5 tentativas. Estado atual no Telegram:', JSON.stringify(info));
+      console.error('Se já havia um webhook registrado anteriormente, o bot continua recebendo updates normalmente.');
+    } catch (e2) {
+      console.error('Webhook não registrado após 5 tentativas e falhou ao consultar o estado (getWebHookInfo):', e2.message || e2);
+    }
     return false;
   }
 

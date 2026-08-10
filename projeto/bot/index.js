@@ -277,11 +277,28 @@ function showBalance(chatId) {
   });
 }
 
+// Valida a config de PIX (Mercado Pago) e aponta qual variável está ausente.
+// Retorna '' se tudo pronto, 'token' se faltar MP_ACCESS_TOKEN, 'email' se faltar MP_PAYER_EMAIL.
+function pixConfigProblem() {
+  const token = String(process.env.MP_ACCESS_TOKEN || '').trim();
+  const email = String(process.env.MP_PAYER_EMAIL || '').trim();
+  if (!token) {
+    console.error('[PIX] MP_ACCESS_TOKEN ausente no processo. O bot já usa o padrão do Mercado Pago (não Asaas).');
+    return 'token';
+  }
+  if (!email) {
+    console.error('[PIX] MP_PAYER_EMAIL ausente no processo.');
+    return 'email';
+  }
+  return '';
+}
+
 async function startRefillPayment(chatId, value) {
-  if (!process.env.MP_ACCESS_TOKEN) {
+  const pixProblem = pixConfigProblem();
+  if (pixProblem === 'token') {
     return bot.sendMessage(chatId, '⚠️ Pagamento PIX ainda não configurado. Fale com o suporte.');
   }
-  if (!process.env.MP_PAYER_EMAIL) {
+  if (pixProblem === 'email') {
     return bot.sendMessage(chatId, '⚠️ Pagamento PIX incompleto: falta o e-mail do Mercado Pago no servidor. Fale com o suporte.');
   }
   if (value < 5) {
@@ -496,10 +513,11 @@ async function runSearch(chatId) {
 
 // Gera (ou reutiliza) a cobrança PIX de um produto. Evita cobranças duplicadas.
 async function generatePixUnlock(chatId, face, platform) {
-  if (!process.env.MP_ACCESS_TOKEN) {
+  const pixProblem = pixConfigProblem();
+  if (pixProblem === 'token') {
     return bot.sendMessage(chatId, '⚠️ Pagamento PIX ainda não configurado. Fale com o suporte.');
   }
-  if (!process.env.MP_PAYER_EMAIL) {
+  if (pixProblem === 'email') {
     return bot.sendMessage(chatId, '⚠️ Pagamento PIX incompleto: falta o e-mail do Mercado Pago no servidor. Fale com o suporte.');
   }
   const amount = Number(process.env.PRICE_FULL_PHOTO || 10);
