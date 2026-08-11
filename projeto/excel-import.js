@@ -27,6 +27,7 @@ const STAGING_DIR = path.join(__dirname, 'painel', 'staging');
 const LOG_DIR = path.join(__dirname, 'logs');
 const LOG_FILE = path.join(LOG_DIR, 'excel-importer.log');
 const IMAGE_RE = /\.(jpe?g|png|webp)$/i;
+fs.mkdirSync(LOG_DIR, { recursive: true });
 const DEFAULT_PRICE = Number(process.env.PRICE_FULL_PHOTO || 10);
 const CONCURRENCY = Math.max(1, Number(process.env.IMPORTER_CONCURRENCY || 2));
 const PENDING_TTL_MS = 30 * 60 * 1000;
@@ -39,7 +40,6 @@ function log(line) {
   const stamp = new Date().toISOString();
   console.log('[excel-import] ' + line);
   try {
-    fs.mkdirSync(LOG_DIR, { recursive: true });
     fs.appendFileSync(LOG_FILE, `[${stamp}] ${line}\n`);
   } catch (e) { /* ignora */ }
 }
@@ -234,6 +234,9 @@ function sanitizeEntryName(name) {
 function extractZipPhotos(zipSrc) {
   let zip;
   try {
+    if (typeof zipSrc === 'string' && fs.existsSync(zipSrc) && fs.statSync(zipSrc).size > MAX_ZIP_BYTES) {
+      throw new Error('O .zip é grande demais (máximo de 300 MB de fotos).');
+    }
     const buf = Buffer.isBuffer(zipSrc) ? zipSrc : fs.readFileSync(zipSrc);
     zip = new AdmZip(buf);
   } catch (e) {
@@ -403,6 +406,13 @@ async function buildPreview(buf, filename, opts = {}) {
 
 const pending = new Map();
 let resumeCallback = null;
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [token, p] of pending) {
+    if (now > p.expiresAt) pending.delete(token);
+  }
+}, 5 * 60 * 1000).unref();
 
 function setResumeCallback(fn) {
   resumeCallback = fn;

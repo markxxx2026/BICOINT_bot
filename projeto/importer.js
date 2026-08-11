@@ -29,6 +29,7 @@ const UPLOADS_DIR = path.join(__dirname, 'painel', 'uploads');
 const REJECTED_DIR = path.join(__dirname, 'painel', 'rejected');
 const LOG_DIR = path.join(__dirname, 'logs');
 const LOG_FILE = path.join(LOG_DIR, 'importer.log');
+fs.mkdirSync(LOG_DIR, { recursive: true });
 
 const IMAGE_RE = /\.(jpe?g|png|webp)$/i;
 const POLL_MS = Number(process.env.IMPORTER_POLL_MS || 2000);
@@ -62,7 +63,6 @@ function log(line) {
   const stamp = new Date().toISOString();
   console.log('[importer] ' + line);
   try {
-    fs.mkdirSync(LOG_DIR, { recursive: true });
     fs.appendFileSync(LOG_FILE, `[${stamp}] ${line}\n`);
   } catch (e) { /* ignora */ }
 }

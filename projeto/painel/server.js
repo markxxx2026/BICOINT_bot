@@ -17,6 +17,15 @@ const PORT = process.env.PANEL_PORT || 3000;
 const FACES_DIR = path.join(__dirname, 'faces');
 
 const sessions = new Map();
+const SESSION_TTL_MS = 24 * 3600 * 1000;
+const SESSION_SWEEP_MS = 10 * 60 * 1000;
+
+setInterval(() => {
+  const cutoff = Date.now() - SESSION_TTL_MS;
+  for (const [token, s] of sessions) {
+    if (s && s._ts && s._ts < cutoff) sessions.delete(token);
+  }
+}, SESSION_SWEEP_MS).unref();
 
 function parseCookies(req) {
   const cookie = req.headers.cookie;
@@ -205,7 +214,7 @@ app.post('/login', (req, res) => {
       return res.status(401).render('login', { error: 'Usuário ou senha inválidos.' });
     }
     const token = crypto.randomBytes(32).toString('hex');
-    sessions.set(token, username);
+    sessions.set(token, { username, _ts: Date.now() });
     res.setHeader('Set-Cookie', `session=${token}; HttpOnly; Path=/; Max-Age=86400`);
     res.redirect('/dashboard');
   });

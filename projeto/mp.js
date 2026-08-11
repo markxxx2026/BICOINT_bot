@@ -4,6 +4,15 @@ const https = require('https');
 const BASE_URL = 'https://api.mercadopago.com';
 
 const qrCache = new Map();
+const QR_TTL_MS = 24 * 3600 * 1000;
+const QR_MAX = 500;
+
+function qrCacheSet(id, td) {
+  qrCache.set(id, { ts: Date.now(), td });
+  if (qrCache.size > QR_MAX) {
+    qrCache.delete(qrCache.keys().next().value);
+  }
+}
 
 // Lê o token a cada uso (não congela no carregamento do módulo), aceitando
 // também configuração posterior do ambiente sem precisar reiniciar o bot.
@@ -117,12 +126,18 @@ async function createPixPayment({ chatId, value, externalReference, description 
   }
   const payment = await request('POST', '/v1/payments', body, { 'X-Idempotency-Key': String(externalReference || `PIX_${Date.now()}`) });
   const td = transactionDataFrom(payment);
-  if (td && td.qr_code) qrCache.set(String(payment.id), td);
+  if (td && td.qr_code) qrCacheSet(String(payment.id), td);
   return payment;
 }
 
 async function getPixQrCode(paymentId) {
-  let td = qrCache.get(String(paymentId));
+  let td = null;
+  const entry = qrCache.get(String(paymentId));
+  if (entry && Date.now() - entry.ts < QR_TTL_MS) {
+    td = entry.td;
+  } else if (entry) {
+    qrCache.delete(String(paymentId));
+  }
   if (!td) {
     const p = await request('GET', `/v1/payments/${paymentId}`);
     td = transactionDataFrom(p);

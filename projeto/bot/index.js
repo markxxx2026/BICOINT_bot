@@ -241,6 +241,29 @@ const awaitingName = {};
 const awaitingRefill = {};
 const mesclaSessions = {};
 
+const SESSION_TTL_MS = 30 * 60 * 1000;
+const SESSION_SWEEP_MS = 10 * 60 * 1000;
+const runningJobs = new Set();
+
+function sweepStaleSessions() {
+  const cutoff = Date.now() - SESSION_TTL_MS;
+  for (const m of [session, awaitingName, awaitingRefill, mesclaSessions]) {
+    for (const k of Object.keys(m)) {
+      if (m[k] && typeof m[k] === 'object' && m[k]._ts && m[k]._ts < cutoff) delete m[k];
+    }
+  }
+}
+setInterval(sweepStaleSessions, SESSION_SWEEP_MS).unref();
+
+function runExclusive(name, fn) {
+  if (runningJobs.has(name)) return;
+  runningJobs.add(name);
+  Promise.resolve()
+    .then(fn)
+    .catch((e) => console.error(`[job ${name}] erro inesperado:`, e && e.message ? e.message : e))
+    .finally(() => runningJobs.delete(name));
+}
+
 function randomName() {
   return RANDOM_NAMES[Math.floor(Math.random() * RANDOM_NAMES.length)];
 }
@@ -255,7 +278,7 @@ function parseRefillValue(raw) {
 }
 
 function startRefill(chatId) {
-  awaitingRefill[chatId] = true;
+  awaitingRefill[chatId] = { _ts: Date.now() };
   bot.sendMessage(
     chatId,
     '💰 ABASTECER CRÉDITOS\n\n' +
@@ -373,7 +396,7 @@ bot.on('photo', async (msg) => {
       return bot.sendMessage(chatId, 'Não encontrei nenhum rosto na foto. Tente outra imagem.');
     }
 
-    session[chatId] = { embedding, ...defaultMenuState() };
+    session[chatId] = { embedding, ...defaultMenuState(), _ts: Date.now() };
     bot.deleteMessage(chatId, ack.message_id).catch(() => {});
     bot.sendMessage(
       chatId,
@@ -645,7 +668,7 @@ bot.onText(/\/comparar/, (msg) => {
 
 bot.onText(/\/mesclas/, (msg) => {
   const chatId = msg.chat.id;
-  mesclaSessions[chatId] = { step: 'foto1', buf1: null };
+  mesclaSessions[chatId] = { step: 'foto1', buf1: null, _ts: Date.now() };
   bot.sendMessage(
     chatId,
     '🧬 FUSÃO DE ROSTO\n\n' +
@@ -787,7 +810,7 @@ bot.on('callback_query', async (query) => {
   if (data === 'confirm_search') {
     await bot.answerCallbackQuery(query.id);
     const st = session[chatId];
-    if (st) session[chatId] = { embedding: st.embedding, ...menuStateToFilters(st) };
+    if (st) session[chatId] = { embedding: st.embedding, ...menuStateToFilters(st), _ts: Date.now() };
     return startSearch(chatId);
   }
 
@@ -805,7 +828,7 @@ bot.on('callback_query', async (query) => {
         console.error('Erro ao atualizar teclado:', err.message);
       }
       if (selection.group === 'name' && selection.opt.id === 'first') {
-        awaitingName[chatId] = true;
+        awaitingName[chatId] = { _ts: Date.now() };
         return bot.sendMessage(chatId, '✏️ Digite o primeiro nome para filtrar:');
       }
       return;
@@ -820,7 +843,7 @@ bot.on('callback_query', async (query) => {
         });
       }
       await bot.answerCallbackQuery(query.id, { text: '🔎 Buscando...' });
-      session[chatId] = { embedding: f.embedding, ...menuStateToFilters(f) };
+      session[chatId] = { embedding: f.embedding, ...menuStateToFilters(f), _ts: Date.now() };
       return startSearch(chatId);
     }
   }
@@ -932,7 +955,7 @@ async function deliverPaidUnlocks() {
   );
 }
 
-setInterval(deliverPaidUnlocks, 5000);
+setInterval(() => runExclusive('deliverPaidUnlocks', deliverPaidUnlocks), 5000).unref();
 
 async function checkPendingPayments() {
   if (!process.env.MP_ACCESS_TOKEN) return;
@@ -967,7 +990,7 @@ async function checkPendingPayments() {
   );
 }
 
-setInterval(checkPendingPayments, 5000);
+setInterval(() => runExclusive('checkPendingPayments', checkPendingPayments), 5400).unref();
 
 async function checkPendingRefills() {
   if (!process.env.MP_ACCESS_TOKEN) return;
@@ -1010,7 +1033,7 @@ async function checkPendingRefills() {
   );
 }
 
-setInterval(checkPendingRefills, 5000);
+setInterval(() => runExclusive('checkPendingRefills', checkPendingRefills), 5800).unref();
 
 async function notifyPaidRefills() {
   db.all(
@@ -1038,7 +1061,7 @@ async function notifyPaidRefills() {
   );
 }
 
-setInterval(notifyPaidRefills, 5000);
+setInterval(() => runExclusive('notifyPaidRefills', notifyPaidRefills), 6200).unref();
 
 async function notifyReferralRewards() {
   db.all(
@@ -1063,6 +1086,6 @@ async function notifyReferralRewards() {
   );
 }
 
-setInterval(notifyReferralRewards, 5000);
+setInterval(() => runExclusive('notifyReferralRewards', notifyReferralRewards), 6600).unref();
 
 module.exports = { bot };
