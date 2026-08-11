@@ -71,6 +71,8 @@ function normHeader(h) {
 const HEADER_RULES = [
   { role: 'cpf', test: (n) => /cpf|cnpj|documento|\bdoc\b/.test(n) },
   { role: 'plataforma', test: (n) => /plataforma|aplicativo|\bapp\b/.test(n) },
+  { role: 'uber', test: (n) => n === 'uber' || n === 'uberx99' },
+  { role: 'x99', test: (n) => n === '99' || n === 'x99' },
   {
     role: 'numero',
     test: (n) =>
@@ -146,6 +148,31 @@ function normalizePlatform(v) {
   return null;
 }
 
+// Interpreta o valor de uma célula das colunas "Uber"/"99" como um booleano
+// "pode ser vendido": V/Sim/✓/"TEM CONTA" -> true | X/Não/✗/"SEM CADASTRO"/em
+// branco -> false. Qualquer texto fora desses padrões conta como "não".
+function platformSellable(v) {
+  const s = String(v == null ? '' : v)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
+  if (!s) return false;
+  if (/^(v|s|sim|yes|true|1|ok|check|tem|conta|tem conta|verdadeiro|disponivel|ativo|[\u2713\u2714\u2611])$/.test(s)) return true;
+  return false;
+}
+
+// Combina as colunas "Uber" e "99" (V/X) em uma plataforma única:
+// V+V -> uberx99 | V+X -> uber | X+V -> 99 | X+X -> null.
+function plataformaDeColunas(vUber, v99) {
+  const uberOk = platformSellable(vUber);
+  const n99Ok = platformSellable(v99);
+  if (uberOk && n99Ok) return 'uberx99';
+  if (uberOk) return 'uber';
+  if (n99Ok) return '99';
+  return null;
+}
+
 function prettyStem(name) {
   return String(name)
     .replace(/\.[^.]+$/, '')
@@ -187,9 +214,13 @@ function parseExcel(buf) {
       numeroDisplay: displayNumber(numeroRaw),
       nome: colMap.nome !== undefined ? get(row, colMap.nome) : null,
       cpf: colMap.cpf !== undefined ? get(row, colMap.cpf) : null,
-      descricao: colMap.descricao !== undefined ? get(row, colMap.descricao) : null,
-      plataforma: colMap.plataforma !== undefined ? get(row, colMap.plataforma) : null
-    };
+    descricao: colMap.descricao !== undefined ? get(row, colMap.descricao) : null,
+    plataforma: colMap.plataforma !== undefined
+      ? get(row, colMap.plataforma)
+      : colMap.uber !== undefined || colMap.x99 !== undefined
+        ? plataformaDeColunas(get(row, colMap.uber), get(row, colMap.x99))
+        : null
+  };
   });
 
   return { records, colMap };
