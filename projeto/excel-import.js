@@ -149,8 +149,8 @@ function normalizePlatform(v) {
 }
 
 // Interpreta o valor de uma célula das colunas "Uber"/"99" como um booleano
-// "pode ser vendido": V/Sim/✓/"TEM CONTA" -> true | X/Não/✗/"SEM CADASTRO"/em
-// branco -> false. Qualquer texto fora desses padrões conta como "não".
+// "pode ser vendido": V/Sim/✅/✔/"TEM CONTA" -> true | X/Não/❌/"SEM CADASTRO"/
+// em branco -> false. Qualquer texto fora desses padrões conta como "não".
 function platformSellable(v) {
   const s = String(v == null ? '' : v)
     .normalize('NFD')
@@ -158,7 +158,7 @@ function platformSellable(v) {
     .toLowerCase()
     .trim();
   if (!s) return false;
-  if (/^(v|s|sim|yes|true|1|ok|check|tem|conta|tem conta|verdadeiro|disponivel|ativo|[\u2713\u2714\u2611])$/.test(s)) return true;
+  if (/^(v|s|sim|yes|true|1|ok|check|tem|conta|tem conta|verdadeiro|disponivel|ativo|[\u2705\u2713\u2714\u2611])$/.test(s)) return true;
   return false;
 }
 
